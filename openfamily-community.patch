@@ -1,0 +1,3327 @@
+diff --git a/client/src/components/ui/DatePicker.tsx b/client/src/components/ui/DatePicker.tsx
+index 7cd1fe1..414952a 100644
+--- a/client/src/components/ui/DatePicker.tsx
++++ b/client/src/components/ui/DatePicker.tsx
+@@ -1,6 +1,19 @@
+-import React from 'react';
+-import { format } from 'date-fns';
++import React, { useEffect, useMemo, useRef, useState } from 'react';
++import {
++    addMonths,
++    eachDayOfInterval,
++    endOfMonth,
++    endOfWeek,
++    format,
++    isSameDay,
++    isSameMonth,
++    startOfMonth,
++    startOfWeek,
++    subMonths,
++} from 'date-fns';
++import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+ import { cn } from '../../lib/utils';
++import { dateLocale } from '../../i18n/format';
+ 
+ interface DatePickerProps {
+     value: string;
+@@ -21,9 +34,222 @@ const parseDateTimeValue = (value: string): { date: string; time: string } => {
+     const [datePart, timePart = ''] = normalized.split('T');
+     const safeDate = /^\d{4}-\d{2}-\d{2}$/.test(datePart) ? datePart : '';
+     const safeTime = /^(\d{2}:\d{2})/.test(timePart) ? timePart.slice(0, 5) : '';
++
+     return { date: safeDate, time: safeTime };
+ };
+ 
++const parseDateOnly = (value?: string): Date | null => {
++    if (!value) return null;
++
++    const match = value.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
++    if (!match) return null;
++
++    const [, year, month, day] = match;
++    const parsed = new Date(Number(year), Number(month) - 1, Number(day));
++
++    return Number.isNaN(parsed.getTime()) ? null : parsed;
++};
++
++const formatDateOnly = (date: Date): string =>
++    format(date, 'yyyy-MM-dd');
++
++interface CalendarDateInputProps {
++    value: string;
++    onChange: (value: string) => void;
++    min?: string;
++    max?: string;
++    className?: string;
++}
++
++const CalendarDateInput: React.FC<CalendarDateInputProps> = ({
++    value,
++    onChange,
++    min,
++    max,
++    className,
++}) => {
++    const selectedDate = parseDateOnly(value);
++    const minDate = parseDateOnly(min);
++    const maxDate = parseDateOnly(max);
++
++    const [open, setOpen] = useState(false);
++    const [visibleMonth, setVisibleMonth] = useState(
++        selectedDate || new Date()
++    );
++
++    const wrapperRef = useRef<HTMLDivElement>(null);
++
++    useEffect(() => {
++        if (selectedDate) {
++            setVisibleMonth(selectedDate);
++        }
++    }, [value]);
++
++    useEffect(() => {
++        if (!open) return;
++
++        const handlePointerDown = (event: MouseEvent) => {
++            if (
++                wrapperRef.current &&
++                !wrapperRef.current.contains(event.target as Node)
++            ) {
++                setOpen(false);
++            }
++        };
++
++        document.addEventListener('mousedown', handlePointerDown);
++
++        return () => {
++            document.removeEventListener('mousedown', handlePointerDown);
++        };
++    }, [open]);
++
++    const monthStart = startOfMonth(visibleMonth);
++    const monthEnd = endOfMonth(visibleMonth);
++
++    const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 });
++    const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
++
++    const days = useMemo(
++        () => eachDayOfInterval({ start: calendarStart, end: calendarEnd }),
++        [calendarStart.getTime(), calendarEnd.getTime()]
++    );
++
++    const weekdayLabels = useMemo(() => {
++        const sunday = startOfWeek(new Date(), { weekStartsOn: 0 });
++
++        return Array.from({ length: 7 }, (_, index) => {
++            const day = new Date(sunday);
++            day.setDate(sunday.getDate() + index);
++
++            return format(day, 'EEEEE', { locale: dateLocale() });
++        });
++    }, []);
++
++    const isDisabled = (date: Date) => {
++        const time = new Date(
++            date.getFullYear(),
++            date.getMonth(),
++            date.getDate()
++        ).getTime();
++
++        if (minDate) {
++            const minTime = new Date(
++                minDate.getFullYear(),
++                minDate.getMonth(),
++                minDate.getDate()
++            ).getTime();
++
++            if (time < minTime) return true;
++        }
++
++        if (maxDate) {
++            const maxTime = new Date(
++                maxDate.getFullYear(),
++                maxDate.getMonth(),
++                maxDate.getDate()
++            ).getTime();
++
++            if (time > maxTime) return true;
++        }
++
++        return false;
++    };
++
++    return (
++        <div ref={wrapperRef} className="relative w-full">
++            <button
++                type="button"
++                onClick={() => setOpen((current) => !current)}
++                className={cn(
++                    'input-nexus flex w-full items-center justify-between py-0 text-caption text-left',
++                    className
++                )}
++            >
++                <span className={selectedDate ? 'text-foreground' : 'text-muted-foreground'}>
++                    {selectedDate
++                        ? format(selectedDate, 'P', { locale: dateLocale() })
++                        : ''}
++                </span>
++
++                <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
++            </button>
++
++            {open && (
++                <div className="absolute left-0 top-full z-50 mt-2 w-[292px] rounded-card border border-border bg-popover p-3 shadow-surface-hover">
++                    <div className="mb-3 flex items-center justify-between">
++                        <button
++                            type="button"
++                            onClick={() => setVisibleMonth((current) => subMonths(current, 1))}
++                            className="flex h-8 w-8 items-center justify-center rounded-input hover:bg-surface-2"
++                            aria-label="Previous month"
++                        >
++                            <ChevronLeft className="h-4 w-4" />
++                        </button>
++
++                        <div className="text-caption font-semibold capitalize text-foreground">
++                            {format(visibleMonth, 'MMMM yyyy', {
++                                locale: dateLocale(),
++                            })}
++                        </div>
++
++                        <button
++                            type="button"
++                            onClick={() => setVisibleMonth((current) => addMonths(current, 1))}
++                            className="flex h-8 w-8 items-center justify-center rounded-input hover:bg-surface-2"
++                            aria-label="Next month"
++                        >
++                            <ChevronRight className="h-4 w-4" />
++                        </button>
++                    </div>
++
++                    <div className="grid grid-cols-7 gap-1">
++                        {weekdayLabels.map((label, index) => (
++                            <div
++                                key={`${label}-${index}`}
++                                className="flex h-8 items-center justify-center text-micro font-medium text-muted-foreground"
++                            >
++                                {label}
++                            </div>
++                        ))}
++
++                        {days.map((day) => {
++                            const disabled = isDisabled(day);
++                            const selected = selectedDate
++                                ? isSameDay(day, selectedDate)
++                                : false;
++                            const currentMonth = isSameMonth(day, visibleMonth);
++
++                            return (
++                                <button
++                                    key={formatDateOnly(day)}
++                                    type="button"
++                                    disabled={disabled}
++                                    onClick={() => {
++                                        onChange(formatDateOnly(day));
++                                        setOpen(false);
++                                    }}
++                                    className={cn(
++                                        'flex h-9 w-9 items-center justify-center rounded-input text-caption transition-colors',
++                                        currentMonth
++                                            ? 'text-foreground'
++                                            : 'text-muted-foreground opacity-50',
++                                        !disabled && 'hover:bg-surface-2',
++                                        selected && 'bg-primary text-primary-foreground hover:bg-primary',
++                                        disabled && 'cursor-not-allowed opacity-30'
++                                    )}
++                                >
++                                    {format(day, 'd')}
++                                </button>
++                            );
++                        })}
++                    </div>
++                </div>
++            )}
++        </div>
++    );
++};
++
+ export const DatePicker: React.FC<DatePickerProps> = ({
+     value,
+     onChange,
+@@ -35,8 +261,6 @@ export const DatePicker: React.FC<DatePickerProps> = ({
+ }) => {
+     if (type === 'datetime-local') {
+         const { date, time } = parseDateTimeValue(value);
+-        // Local date — toISOString() would give the UTC day, which is wrong near
+-        // midnight for users outside UTC.
+         const today = format(new Date(), 'yyyy-MM-dd');
+         const minDate = min ? min.slice(0, 10) : undefined;
+         const maxDate = max ? max.slice(0, 10) : undefined;
+@@ -48,45 +272,76 @@ export const DatePicker: React.FC<DatePickerProps> = ({
+                         {label}
+                     </label>
+                 )}
++
+                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+-                    <input
+-                        type="date"
++                    <CalendarDateInput
+                         value={date}
+-                        onChange={(e) => {
+-                            const nextDate = e.target.value;
++                        min={minDate}
++                        max={maxDate}
++                        onChange={(nextDate) => {
+                             if (!nextDate) {
+                                 onChange('');
+                                 return;
+                             }
++
+                             onChange(`${nextDate}T${time || '09:00'}`);
+                         }}
+-                        min={minDate}
+-                        max={maxDate}
+-                        className={cn('input-nexus py-0 text-caption', className)}
++                        className={className}
+                     />
++
+                     <input
+                         type="time"
+                         step={60}
+                         value={time}
+                         onChange={(e) => {
+                             const nextTime = e.target.value;
++
+                             if (!nextTime) {
+                                 if (!date) {
+                                     onChange('');
+                                     return;
+                                 }
++
+                                 onChange(`${date}T00:00`);
+                                 return;
+                             }
++
+                             onChange(`${date || today}T${nextTime}`);
+                         }}
+-                        className={cn('input-nexus py-0 text-caption', className)}
++                        className={cn(
++                            'input-nexus py-0 text-caption',
++                            className
++                        )}
+                     />
+                 </div>
+             </div>
+         );
+     }
+ 
++    if (type === 'time') {
++        return (
++            <div className="w-full">
++                {label && (
++                    <label className="mb-1.5 block text-caption font-medium text-foreground">
++                        {label}
++                    </label>
++                )}
++
++                <input
++                    type="time"
++                    value={value}
++                    onChange={(e) => onChange(e.target.value)}
++                    min={min}
++                    max={max}
++                    className={cn(
++                        'input-nexus py-0 text-caption',
++                        className
++                    )}
++                />
++            </div>
++        );
++    }
++
+     return (
+         <div className="w-full">
+             {label && (
+@@ -94,13 +349,13 @@ export const DatePicker: React.FC<DatePickerProps> = ({
+                     {label}
+                 </label>
+             )}
+-            <input
+-                type={type}
++
++            <CalendarDateInput
+                 value={value}
+-                onChange={(e) => onChange(e.target.value)}
++                onChange={onChange}
+                 min={min}
+                 max={max}
+-                className={cn('input-nexus py-0 text-caption', className)}
++                className={className}
+             />
+         </div>
+     );
+diff --git a/client/src/components/ui/Select.tsx b/client/src/components/ui/Select.tsx
+index 5d43854..d7d1007 100644
+--- a/client/src/components/ui/Select.tsx
++++ b/client/src/components/ui/Select.tsx
+@@ -45,7 +45,7 @@ export const Select: React.FC<SelectProps> = ({
+                     position="popper"
+                     sideOffset={6}
+                 >
+-                    <SelectPrimitive.Viewport className="p-1">
++                    <SelectPrimitive.Viewport className="p-1 max-h-[min(24rem,var(--radix-select-content-available-height))] overflow-y-auto">
+                         {options.map((option) => (
+                             <SelectPrimitive.Item
+                                 key={`${option.value}-${option.label}`}
+diff --git a/client/src/i18n/locales/en/calendar.json b/client/src/i18n/locales/en/calendar.json
+index 6e9ed6d..e4300e3 100644
+--- a/client/src/i18n/locales/en/calendar.json
++++ b/client/src/i18n/locales/en/calendar.json
+@@ -1,29 +1,42 @@
+ {
+   "loading": "Loading calendar…",
+   "title": "Calendar",
+-  "subtitle": "Manage your family appointments",
++  "subtitle": "Manage your family calendar events",
+   "exportIcal": "Export (iCal)",
+-  "newAppointment": "New appointment",
++  "newAppointment": "New calendar event",
+   "moreOthers": "+{{count}} more",
+   "upcoming": {
+-    "title": "Upcoming appointments",
+-    "empty": "No upcoming appointments"
++    "title": "Upcoming calendar events",
++    "empty": "No upcoming calendar events"
+   },
+   "dialog": {
+-    "editTitle": "Edit appointment",
+-    "createTitle": "New appointment",
+-    "description": "Fill in the appointment details"
++    "editTitle": "Edit calendar event",
++    "createTitle": "New calendar event",
++    "description": "Fill in the calendar event details"
+   },
+   "form": {
+     "title": "Title",
+-    "titlePlaceholder": "e.g. Doctor's appointment",
++    "titlePlaceholder": "e.g. Doctor's calendar event",
+     "description": "Description (optional)",
++    "color": "Color",
+     "descriptionPlaceholder": "Additional details…",
+     "scheduling": "Scheduling",
+     "startDate": "Start date",
+     "startTime": "Start time",
+     "endDate": "End date",
+     "endTime": "End time",
++    "repeat": "Repeat",
++    "repeatNone": "Does not repeat",
++    "repeatDaily": "Daily",
++    "repeatWeekly": "Weekly",
++    "repeatMonthly": "Monthly",
++    "repeatYearly": "Yearly",
++    "repeatUntil": "Repeat until (optional)",
++    "repeatEvery": "Every",
++    "repeatDays": "day(s)",
++    "repeatWeeks": "week(s)",
++    "repeatMonths": "month(s)",
++    "repeatYears": "year(s)",
+     "location": "Location (optional)",
+     "locationPlaceholder": "e.g. Doctor's office",
+     "members": "Family members (optional)",
+@@ -37,24 +50,45 @@
+   },
+   "feed": {
+     "title": "Export calendar (iCal)",
+-    "description": "Subscribe from Apple Calendar, Google Calendar or Outlook to sync your appointments automatically.",
++    "description": "Subscribe from Apple Calendar, Google Calendar or Outlook to sync your calendar events automatically.",
+     "generating": "Generating link…",
+     "subscribeLink": "Subscription link",
+     "subscribeApple": "Subscribe (Apple / Outlook)",
+     "downloadIcs": "Download the .ics file",
+-    "privateNote": "This link is private: anyone who has it can view your appointments.",
++    "privateNote": "This link is private: anyone who has it can view your calendar events.",
+     "regenerate": "Regenerate link"
+   },
+-  "confirmDelete": "Are you sure you want to delete this appointment?",
++  "confirmDelete": "Are you sure you want to delete this calendar event?",
+   "confirmRegen": "Regenerate the link? Existing subscriptions will stop working.",
+   "errors": {
+-    "loadAppointments": "Unable to load appointments.",
++    "loadAppointments": "Unable to load calendar events.",
+     "loadMembers": "Unable to load members.",
+     "icalFetch": "Unable to retrieve the iCal link.",
+     "icalRegen": "Unable to regenerate the link.",
+     "startRequired": "Please enter a start date and time.",
+     "endAfterStart": "The end time must be after the start time.",
+-    "save": "Unable to save this appointment.",
+-    "delete": "Unable to delete this appointment."
++    "save": "Unable to save this calendar event.",
++    "delete": "Unable to delete this calendar event."
++  },
++  "recurrenceScope": {
++    "editTitle": "Edit recurring calendar event",
++    "editDescription": "Apply these changes to this occurrence only or to the entire series?",
++    "deleteTitle": "Delete recurring calendar event",
++    "deleteDescription": "Delete this occurrence only or the entire series?",
++    "thisOccurrence": "This occurrence",
++    "allOccurrences": "All occurrences"
++  },
++  "search": {
++    "placeholder": "Search Calendar Events...",
++    "clear": "Clear search",
++    "resultCount": "{{count}} matching event(s)",
++    "noResults": "No Calendar Events match your search."
++  },
++  "dayAction": {
++    "choiceDescription": "This date already has Calendar Events. What would you like to do?",
++    "displayDescription": "Calendar Events for this date",
++    "display": "Display events",
++    "add": "Add event",
++    "back": "Back"
+   }
+ }
+diff --git a/client/src/i18n/locales/en/dashboard.json b/client/src/i18n/locales/en/dashboard.json
+index 49a2d7e..cb61f9f 100644
+--- a/client/src/i18n/locales/en/dashboard.json
++++ b/client/src/i18n/locales/en/dashboard.json
+@@ -11,7 +11,7 @@
+     "cta": "View details"
+   },
+   "stats": {
+-    "appointments": "Appointments",
++    "appointments": "Calendar Events",
+     "tasks": "Tasks",
+     "shopping": "Shopping",
+     "monthExpenses": "This month's expenses"
+@@ -20,11 +20,11 @@
+     "title": "Today",
+     "viewWeek": "Week",
+     "emptyTitle": "Nothing planned.",
+-    "emptySubtitle": "Add an appointment to see it appear here.",
+-    "emptyCta": "Add an appointment",
++    "emptySubtitle": "Add an calendar event to see it appear here.",
++    "emptyCta": "Add an calendar event",
+     "weekTitle": "This week",
+     "viewDay": "Day",
+-    "emptyWeekSubtitle": "No appointments this week."
++    "emptyWeekSubtitle": "No calendar events this week."
+   },
+   "aside": {
+     "shopping": "Shopping",
+@@ -56,7 +56,7 @@
+     "moduleDisabled": "(module disabled)",
+     "widgets": {
+       "stats": "Key figures",
+-      "agenda": "Agenda (appointments)",
++      "agenda": "Agenda (calendar events)",
+       "planning": "This week's schedules",
+       "quick": "Quick access (shopping, budget, tasks)",
+       "notes": "Family notes"
+diff --git a/client/src/i18n/locales/en/integrations.json b/client/src/i18n/locales/en/integrations.json
+index be4b05b..859fa05 100644
+--- a/client/src/i18n/locales/en/integrations.json
++++ b/client/src/i18n/locales/en/integrations.json
+@@ -26,7 +26,7 @@
+     "shopping": "Shopping list",
+     "stock": "Stock",
+     "calendar": "Calendar",
+-    "appointments": "Appointments",
++    "appointments": "Calendar Events",
+     "photos": "Photos"
+   },
+   "catalog": {
+@@ -66,7 +66,7 @@
+     },
+     "nextcloud": {
+       "tagline": "Personal cloud",
+-      "description": "Import your Nextcloud calendar events into your appointments.",
++      "description": "Import your Nextcloud calendar events into your calendar events.",
+       "urlLabel": "Nextcloud URL",
+       "urlPlaceholder": "https://cloud.mydomain.com",
+       "userLabel": "Username",
+diff --git a/client/src/i18n/locales/en/nav.json b/client/src/i18n/locales/en/nav.json
+index 7e13484..e539487 100644
+--- a/client/src/i18n/locales/en/nav.json
++++ b/client/src/i18n/locales/en/nav.json
+@@ -4,7 +4,7 @@
+     "shopping": "Shopping",
+     "tasks": "Tasks",
+     "rewards": "Pocket money",
+-    "calendar": "Appointments",
++    "calendar": "Calendar Events",
+     "planning": "Planning",
+     "recipes": "Recipes",
+     "meals": "Meals",
+@@ -24,7 +24,7 @@
+     "title": "Quick actions",
+     "addShopping": "Add a grocery item",
+     "addTask": "Add a task",
+-    "addAppointment": "Add an appointment",
++    "addAppointment": "Add an calendar event",
+     "addSchedule": "Add a schedule entry",
+     "addRecipe": "Add a recipe",
+     "addMeal": "Add a meal",
+diff --git a/client/src/i18n/locales/en/planning.json b/client/src/i18n/locales/en/planning.json
+index c3afec9..dc2ee31 100644
+--- a/client/src/i18n/locales/en/planning.json
++++ b/client/src/i18n/locales/en/planning.json
+@@ -78,7 +78,7 @@
+     "restore": "Put this one back"
+   },
+   "appointments": {
+-    "badge": "APPT",
++    "badge": "EVENT",
+     "openCalendar": "Open in the calendar"
+   }
+ }
+diff --git a/client/src/i18n/locales/en/settings.json b/client/src/i18n/locales/en/settings.json
+index d3cccff..27db936 100644
+--- a/client/src/i18n/locales/en/settings.json
++++ b/client/src/i18n/locales/en/settings.json
+@@ -14,7 +14,7 @@
+   },
+   "notif": {
+     "title": "Push notifications",
+-    "subtitle": "Get reminders for your appointments directly on this device, even when the app is closed.",
++    "subtitle": "Get reminders for your calendar events directly on this device, even when the app is closed.",
+     "unsupported": "Notifications are not supported on this browser.",
+     "denied": "Permission denied. Allow notifications in your browser settings.",
+     "enable": "Enable notifications",
+@@ -50,7 +50,7 @@
+   },
+   "export": {
+     "title": "Export data",
+-    "subtitle": "Download all your data (budget, tasks, recipes, members, shopping, appointments, planning, meals) as a JSON file.",
++    "subtitle": "Download all your data (budget, tasks, recipes, members, shopping, calendar events, planning, meals) as a JSON file.",
+     "button": "Export",
+     "inProgress": "Exporting…"
+   },
+@@ -73,7 +73,7 @@
+     "budget_entries": "Budget entries",
+     "budget_limits": "Budget limits",
+     "shopping_items": "Shopping items",
+-    "appointments": "Appointments",
++    "appointments": "Calendar Events",
+     "schedule_entries": "Planning entries"
+   },
+   "errors": {
+diff --git a/client/src/i18n/locales/fr/calendar.json b/client/src/i18n/locales/fr/calendar.json
+index 9d0ff21..360e69e 100644
+--- a/client/src/i18n/locales/fr/calendar.json
++++ b/client/src/i18n/locales/fr/calendar.json
+@@ -1,29 +1,42 @@
+ {
+   "loading": "Chargement du calendrier…",
+   "title": "Calendrier",
+-  "subtitle": "Gérez vos rendez-vous familiaux",
++  "subtitle": "Gérez vos événements du calendrier familiaux",
+   "exportIcal": "Exporter (iCal)",
+-  "newAppointment": "Nouveau rendez-vous",
++  "newAppointment": "Nouvel événement",
+   "moreOthers": "+{{count}} autres",
+   "upcoming": {
+-    "title": "Rendez-vous à venir",
+-    "empty": "Aucun rendez-vous à venir"
++    "title": "Événements à venir",
++    "empty": "Aucun événement à venir"
+   },
+   "dialog": {
+-    "editTitle": "Modifier le rendez-vous",
+-    "createTitle": "Nouveau rendez-vous",
+-    "description": "Remplissez les informations du rendez-vous"
++    "editTitle": "Modifier l’événement",
++    "createTitle": "Nouvel événement",
++    "description": "Remplissez les informations de l’événement"
+   },
+   "form": {
+     "title": "Titre",
+-    "titlePlaceholder": "Ex : Rendez-vous médecin",
++    "titlePlaceholder": "Ex : Visite chez le médecin",
+     "description": "Description (facultatif)",
++    "color": "Couleur",
+     "descriptionPlaceholder": "Détails supplémentaires…",
+     "scheduling": "Planification",
+     "startDate": "Début date",
+     "startTime": "Début heure",
+     "endDate": "Fin date",
+     "endTime": "Fin heure",
++    "repeat": "Répéter",
++    "repeatNone": "Ne se répète pas",
++    "repeatDaily": "Tous les jours",
++    "repeatWeekly": "Toutes les semaines",
++    "repeatMonthly": "Tous les mois",
++    "repeatYearly": "Tous les ans",
++    "repeatUntil": "Répéter jusqu’au (facultatif)",
++    "repeatEvery": "Tous les",
++    "repeatDays": "jour(s)",
++    "repeatWeeks": "semaine(s)",
++    "repeatMonths": "mois",
++    "repeatYears": "an(s)",
+     "location": "Lieu (facultatif)",
+     "locationPlaceholder": "Ex : Cabinet médical",
+     "members": "Membres de la famille (facultatif)",
+@@ -37,24 +50,45 @@
+   },
+   "feed": {
+     "title": "Exporter le calendrier (iCal)",
+-    "description": "Abonnez-vous depuis Apple Calendar, Google Agenda ou Outlook pour synchroniser automatiquement vos rendez-vous.",
++    "description": "Abonnez-vous depuis Apple Calendar, Google Agenda ou Outlook pour synchroniser automatiquement vos événements du calendrier.",
+     "generating": "Génération du lien…",
+     "subscribeLink": "Lien d'abonnement",
+     "subscribeApple": "S'abonner (Apple / Outlook)",
+     "downloadIcs": "Télécharger le fichier .ics",
+-    "privateNote": "Ce lien est privé : toute personne le possédant peut consulter vos rendez-vous.",
++    "privateNote": "Ce lien est privé : toute personne le possédant peut consulter vos événements du calendrier.",
+     "regenerate": "Régénérer le lien"
+   },
+-  "confirmDelete": "Êtes-vous sûr de vouloir supprimer ce rendez-vous ?",
++  "confirmDelete": "Êtes-vous sûr de vouloir supprimer cet événement ?",
+   "confirmRegen": "Régénérer le lien ? Les anciens abonnements cesseront de fonctionner.",
+   "errors": {
+-    "loadAppointments": "Impossible de charger les rendez-vous.",
++    "loadAppointments": "Impossible de charger les événements du calendrier.",
+     "loadMembers": "Impossible de charger les membres.",
+     "icalFetch": "Impossible de récupérer le lien iCal.",
+     "icalRegen": "Impossible de régénérer le lien.",
+     "startRequired": "Veuillez renseigner une date et une heure de début.",
+     "endAfterStart": "L'heure de fin doit être après l'heure de début.",
+-    "save": "Impossible d'enregistrer ce rendez-vous.",
+-    "delete": "Impossible de supprimer ce rendez-vous."
++    "save": "Impossible d'enregistrer cet événement.",
++    "delete": "Impossible de supprimer cet événement."
++  },
++  "recurrenceScope": {
++    "editTitle": "Modifier l’événement récurrent",
++    "editDescription": "Appliquer ces modifications uniquement à cette occurrence ou à toute la série ?",
++    "deleteTitle": "Supprimer le événement récurrent",
++    "deleteDescription": "Supprimer uniquement cette occurrence ou toute la série ?",
++    "thisOccurrence": "Cette occurrence",
++    "allOccurrences": "Toutes les occurrences"
++  },
++  "search": {
++    "placeholder": "Rechercher des événements du calendrier...",
++    "clear": "Effacer la recherche",
++    "resultCount": "{{count}} événement(s) correspondant(s)",
++    "noResults": "Aucun événement du calendrier ne correspond à votre recherche."
++  },
++  "dayAction": {
++    "choiceDescription": "Cette date contient déjà des événements du calendrier. Que souhaitez-vous faire ?",
++    "displayDescription": "Événements du calendrier pour cette date",
++    "display": "Afficher les événements",
++    "add": "Ajouter un événement",
++    "back": "Retour"
+   }
+ }
+diff --git a/client/src/i18n/locales/fr/dashboard.json b/client/src/i18n/locales/fr/dashboard.json
+index 0b698e6..146f22c 100644
+--- a/client/src/i18n/locales/fr/dashboard.json
++++ b/client/src/i18n/locales/fr/dashboard.json
+@@ -11,7 +11,7 @@
+     "cta": "Voir le détail"
+   },
+   "stats": {
+-    "appointments": "Rendez-vous",
++    "appointments": "Événements du calendrier",
+     "tasks": "Tâches",
+     "shopping": "Courses",
+     "monthExpenses": "Dépenses du mois"
+@@ -20,11 +20,11 @@
+     "title": "Aujourd'hui",
+     "viewWeek": "Semaine",
+     "emptyTitle": "Rien de prévu.",
+-    "emptySubtitle": "Ajoutez un rendez-vous pour le voir apparaître ici.",
+-    "emptyCta": "Ajouter un rendez-vous",
++    "emptySubtitle": "Ajoutez un événement pour le voir apparaître ici.",
++    "emptyCta": "Ajouter un événement",
+     "weekTitle": "Cette semaine",
+     "viewDay": "Jour",
+-    "emptyWeekSubtitle": "Aucun rendez-vous cette semaine."
++    "emptyWeekSubtitle": "Aucun événement cette semaine."
+   },
+   "aside": {
+     "shopping": "Courses",
+@@ -56,7 +56,7 @@
+     "moduleDisabled": "(module désactivé)",
+     "widgets": {
+       "stats": "Chiffres clés",
+-      "agenda": "Agenda (rendez-vous)",
++      "agenda": "Agenda (événements du calendrier)",
+       "planning": "Plannings de la semaine",
+       "quick": "Accès rapides (courses, budget, tâches)",
+       "notes": "Mots de la famille"
+diff --git a/client/src/i18n/locales/fr/integrations.json b/client/src/i18n/locales/fr/integrations.json
+index 0eccde1..a76cdb5 100644
+--- a/client/src/i18n/locales/fr/integrations.json
++++ b/client/src/i18n/locales/fr/integrations.json
+@@ -26,7 +26,7 @@
+     "shopping": "Liste de courses",
+     "stock": "Stock",
+     "calendar": "Calendrier",
+-    "appointments": "Rendez-vous",
++    "appointments": "Événements du calendrier",
+     "photos": "Photos"
+   },
+   "catalog": {
+@@ -66,7 +66,7 @@
+     },
+     "nextcloud": {
+       "tagline": "Cloud personnel",
+-      "description": "Importez vos événements de calendrier Nextcloud dans vos rendez-vous.",
++      "description": "Importez vos événements de calendrier Nextcloud dans vos événements du calendrier.",
+       "urlLabel": "URL Nextcloud",
+       "urlPlaceholder": "https://cloud.mondomaine.com",
+       "userLabel": "Identifiant",
+diff --git a/client/src/i18n/locales/fr/nav.json b/client/src/i18n/locales/fr/nav.json
+index 7e9e3b0..4a60516 100644
+--- a/client/src/i18n/locales/fr/nav.json
++++ b/client/src/i18n/locales/fr/nav.json
+@@ -4,7 +4,7 @@
+     "shopping": "Courses",
+     "tasks": "Tâches",
+     "rewards": "Argent de poche",
+-    "calendar": "Rendez-vous",
++    "calendar": "Événements du calendrier",
+     "planning": "Planning",
+     "recipes": "Recettes",
+     "meals": "Repas",
+@@ -24,7 +24,7 @@
+     "title": "Actions rapides",
+     "addShopping": "Ajouter une course",
+     "addTask": "Ajouter une tâche",
+-    "addAppointment": "Ajouter un rendez-vous",
++    "addAppointment": "Ajouter un événement",
+     "addSchedule": "Ajouter un horaire",
+     "addRecipe": "Ajouter une recette",
+     "addMeal": "Ajouter un repas",
+diff --git a/client/src/i18n/locales/fr/planning.json b/client/src/i18n/locales/fr/planning.json
+index 733eeb9..5436026 100644
+--- a/client/src/i18n/locales/fr/planning.json
++++ b/client/src/i18n/locales/fr/planning.json
+@@ -78,7 +78,7 @@
+     "restore": "Rétablir cette fois-ci"
+   },
+   "appointments": {
+-    "badge": "RDV",
++    "badge": "ÉVÉN.",
+     "openCalendar": "Ouvrir dans le calendrier"
+   }
+ }
+diff --git a/client/src/i18n/locales/fr/settings.json b/client/src/i18n/locales/fr/settings.json
+index ddefe29..c92c072 100644
+--- a/client/src/i18n/locales/fr/settings.json
++++ b/client/src/i18n/locales/fr/settings.json
+@@ -14,7 +14,7 @@
+   },
+   "notif": {
+     "title": "Notifications push",
+-    "subtitle": "Recevez des rappels pour vos rendez-vous directement sur cet appareil, même quand l'application est fermée.",
++    "subtitle": "Recevez des rappels pour vos événements du calendrier directement sur cet appareil, même quand l'application est fermée.",
+     "unsupported": "Notifications non supportées sur ce navigateur.",
+     "denied": "Permission refusée. Autorisez les notifications dans les paramètres de votre navigateur.",
+     "enable": "Activer les notifications",
+@@ -50,7 +50,7 @@
+   },
+   "export": {
+     "title": "Exporter les données",
+-    "subtitle": "Télécharge toutes vos données (budget, tâches, recettes, membres, courses, rendez-vous, plannings, repas) dans un fichier JSON.",
++    "subtitle": "Télécharge toutes vos données (budget, tâches, recettes, membres, courses, événements du calendrier, plannings, repas) dans un fichier JSON.",
+     "button": "Exporter",
+     "inProgress": "Export en cours…"
+   },
+@@ -73,7 +73,7 @@
+     "budget_entries": "Entrées budget",
+     "budget_limits": "Limites budget",
+     "shopping_items": "Articles de courses",
+-    "appointments": "Rendez-vous",
++    "appointments": "Événements du calendrier",
+     "schedule_entries": "Plannings"
+   },
+   "errors": {
+diff --git a/client/src/i18n/locales/pt/calendar.json b/client/src/i18n/locales/pt/calendar.json
+index a37dbba..303ba61 100644
+--- a/client/src/i18n/locales/pt/calendar.json
++++ b/client/src/i18n/locales/pt/calendar.json
+@@ -1,29 +1,42 @@
+ {
+   "loading": "Carregando calendário…",
+   "title": "Calendário",
+-  "subtitle": "Gerencie os compromissos da sua família",
++  "subtitle": "Gerencie os eventos do calendário da sua família",
+   "exportIcal": "Exportar (iCal)",
+-  "newAppointment": "Novo compromisso",
++  "newAppointment": "Novo evento do calendário",
+   "moreOthers": "+{{count}} mais",
+   "upcoming": {
+-    "title": "Próximos compromissos",
+-    "empty": "Nenhum compromisso agendado"
++    "title": "Próximos eventos do calendário",
++    "empty": "Nenhum evento do calendário agendado"
+   },
+   "dialog": {
+-    "editTitle": "Editar compromisso",
+-    "createTitle": "Novo compromisso",
+-    "description": "Preencha os detalhes do compromisso"
++    "editTitle": "Editar evento do calendário",
++    "createTitle": "Novo evento do calendário",
++    "description": "Preencha os detalhes do evento do calendário"
+   },
+   "form": {
+     "title": "Título",
+     "titlePlaceholder": "ex: Consulta médica, Reunião escolar...",
+     "description": "Descrição (opcional)",
++    "color": "Cor",
+     "descriptionPlaceholder": "Detalhes adicionais…",
+     "scheduling": "Agendamento",
+     "startDate": "Data de início",
+     "startTime": "Hora de início",
+     "endDate": "Data de término",
+     "endTime": "Hora de término",
++    "repeat": "Repetir",
++    "repeatNone": "Não repetir",
++    "repeatDaily": "Diariamente",
++    "repeatWeekly": "Semanalmente",
++    "repeatMonthly": "Mensalmente",
++    "repeatYearly": "Anualmente",
++    "repeatUntil": "Repetir até (opcional)",
++    "repeatEvery": "A cada",
++    "repeatDays": "dia(s)",
++    "repeatWeeks": "semana(s)",
++    "repeatMonths": "mês(es)",
++    "repeatYears": "ano(s)",
+     "location": "Local (opcional)",
+     "locationPlaceholder": "ex: Consultório médico, Escola...",
+     "members": "Membros da família (opcional)",
+@@ -37,24 +50,45 @@
+   },
+   "feed": {
+     "title": "Exportar calendário (iCal / Google)",
+-    "description": "Assine pelo Google Agenda, Apple Calendar ou Outlook para sincronizar seus compromissos automaticamente.",
++    "description": "Assine pelo Google Agenda, Apple Calendar ou Outlook para sincronizar seus eventos do calendário automaticamente.",
+     "generating": "Gerando link…",
+     "subscribeLink": "Link de assinatura iCal",
+     "subscribeApple": "Assinar (Apple / Outlook / Google)",
+     "downloadIcs": "Baixar arquivo .ics",
+-    "privateNote": "Este link é privado: qualquer pessoa com ele pode ver seus compromissos.",
++    "privateNote": "Este link é privado: qualquer pessoa com ele pode ver seus eventos do calendário.",
+     "regenerate": "Regerar link"
+   },
+-  "confirmDelete": "Tem certeza que deseja excluir este compromisso?",
++  "confirmDelete": "Tem certeza que deseja excluir este evento do calendário?",
+   "confirmRegen": "Regerar o link? As assinaturas existentes deixarão de funcionar.",
+   "errors": {
+-    "loadAppointments": "Não foi possível carregar os compromissos.",
++    "loadAppointments": "Não foi possível carregar os eventos do calendário.",
+     "loadMembers": "Não foi possível carregar os membros.",
+     "icalFetch": "Não foi possível obter o link do iCal.",
+     "icalRegen": "Não foi possível regerar o link.",
+     "startRequired": "Por favor, insira a data e hora de início.",
+     "endAfterStart": "A hora de término deve ser após a hora de início.",
+-    "save": "Não foi possível salvar este compromisso.",
+-    "delete": "Não foi possível excluir este compromisso."
++    "save": "Não foi possível salvar este evento do calendário.",
++    "delete": "Não foi possível excluir este evento do calendário."
++  },
++  "recurrenceScope": {
++    "editTitle": "Editar evento do calendário recorrente",
++    "editDescription": "Aplicar estas alterações apenas a esta ocorrência ou a toda a série?",
++    "deleteTitle": "Excluir evento do calendário recorrente",
++    "deleteDescription": "Excluir apenas esta ocorrência ou toda a série?",
++    "thisOccurrence": "Esta ocorrência",
++    "allOccurrences": "Todas as ocorrências"
++  },
++  "search": {
++    "placeholder": "Pesquisar eventos do calendário...",
++    "clear": "Limpar pesquisa",
++    "resultCount": "{{count}} evento(s) correspondente(s)",
++    "noResults": "Nenhum evento do calendário corresponde à sua pesquisa."
++  },
++  "dayAction": {
++    "choiceDescription": "Esta data já possui eventos do calendário. O que deseja fazer?",
++    "displayDescription": "Eventos do calendário nesta data",
++    "display": "Exibir eventos",
++    "add": "Adicionar evento",
++    "back": "Voltar"
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/client/src/i18n/locales/pt/dashboard.json b/client/src/i18n/locales/pt/dashboard.json
+index 411b767..59bb500 100644
+--- a/client/src/i18n/locales/pt/dashboard.json
++++ b/client/src/i18n/locales/pt/dashboard.json
+@@ -11,7 +11,7 @@
+     "cta": "Ver detalhes"
+   },
+   "stats": {
+-    "appointments": "Compromissos",
++    "appointments": "Eventos do calendário",
+     "tasks": "Tarefas",
+     "shopping": "Compras",
+     "monthExpenses": "Despesas do mês"
+@@ -20,11 +20,11 @@
+     "title": "Hoje",
+     "viewWeek": "Ver semana",
+     "emptyTitle": "Nada planejado.",
+-    "emptySubtitle": "Adicione um compromisso para exibi-lo aqui.",
+-    "emptyCta": "Adicionar compromisso",
++    "emptySubtitle": "Adicione um evento do calendário para exibi-lo aqui.",
++    "emptyCta": "Adicionar evento do calendário",
+     "weekTitle": "Esta semana",
+     "viewDay": "Dia",
+-    "emptyWeekSubtitle": "Nenhum compromisso esta semana."
++    "emptyWeekSubtitle": "Nenhum evento do calendário esta semana."
+   },
+   "aside": {
+     "shopping": "Compras",
+@@ -56,7 +56,7 @@
+     "moduleDisabled": "(módulo desativado)",
+     "widgets": {
+       "stats": "Números principais",
+-      "agenda": "Agenda (compromissos)",
++      "agenda": "Agenda (eventos do calendário)",
+       "planning": "Planejamentos da semana",
+       "quick": "Acesso rápido (compras, orçamento, tarefas)",
+       "notes": "Recados da família"
+diff --git a/client/src/i18n/locales/pt/integrations.json b/client/src/i18n/locales/pt/integrations.json
+index be2056c..bf9e779 100644
+--- a/client/src/i18n/locales/pt/integrations.json
++++ b/client/src/i18n/locales/pt/integrations.json
+@@ -26,7 +26,7 @@
+     "shopping": "Lista de compras",
+     "stock": "Estoque",
+     "calendar": "Calendário",
+-    "appointments": "Compromissos",
++    "appointments": "Eventos do calendário",
+     "photos": "Fotos"
+   },
+   "catalog": {
+@@ -66,7 +66,7 @@
+     },
+     "nextcloud": {
+       "tagline": "Nuvem pessoal",
+-      "description": "Importe os eventos do seu calendário Nextcloud para seus compromissos no OpenFamily.",
++      "description": "Importe os eventos do seu calendário Nextcloud para seus eventos do calendário no OpenFamily.",
+       "urlLabel": "URL do Nextcloud",
+       "urlPlaceholder": "https://cloud.meudominio.com",
+       "userLabel": "Nome de usuário",
+@@ -83,4 +83,4 @@
+       "keyPlaceholder": "Obtida em Immich > Configurações de conta > Chaves de API"
+     }
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/client/src/i18n/locales/pt/kiosk.json b/client/src/i18n/locales/pt/kiosk.json
+index 35d71e2..513b30b 100644
+--- a/client/src/i18n/locales/pt/kiosk.json
++++ b/client/src/i18n/locales/pt/kiosk.json
+@@ -30,7 +30,7 @@
+   },
+   "settings": {
+     "title": "Modo Quiosque / Tela da Casa",
+-    "subtitle": "Painel interativo em tela cheia para tablets de parede ou telas da geladeira — compromissos, refeições, tarefas do dia e localização da família.",
++    "subtitle": "Painel interativo em tela cheia para tablets de parede ou telas da geladeira — eventos do calendário, refeições, tarefas do dia e localização da família.",
+     "open": "Abrir modo quiosque"
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/client/src/i18n/locales/pt/nav.json b/client/src/i18n/locales/pt/nav.json
+index e62da08..83d8cc5 100644
+--- a/client/src/i18n/locales/pt/nav.json
++++ b/client/src/i18n/locales/pt/nav.json
+@@ -4,7 +4,7 @@
+     "shopping": "Compras",
+     "tasks": "Tarefas",
+     "rewards": "Mesada",
+-    "calendar": "Compromissos",
++    "calendar": "Eventos do calendário",
+     "planning": "Planejamento",
+     "recipes": "Receitas",
+     "meals": "Refeições",
+@@ -24,7 +24,7 @@
+     "title": "Ações rápidas",
+     "addShopping": "Adicionar item de compras",
+     "addTask": "Adicionar tarefa",
+-    "addAppointment": "Adicionar compromisso",
++    "addAppointment": "Adicionar evento do calendário",
+     "addSchedule": "Adicionar horário na rotina",
+     "addRecipe": "Adicionar receita",
+     "addMeal": "Adicionar refeição",
+@@ -39,4 +39,4 @@
+   },
+   "offline": "Modo offline. Os dados exibidos vêm do cache local. As alterações serão salvas assim que a conexão retornar.",
+   "pageTitleFallback": "Painel Principal"
+-}
+\ No newline at end of file
++}
+diff --git a/client/src/i18n/locales/pt/planning.json b/client/src/i18n/locales/pt/planning.json
+index 325dcfc..f7e0a0b 100644
+--- a/client/src/i18n/locales/pt/planning.json
++++ b/client/src/i18n/locales/pt/planning.json
+@@ -78,7 +78,7 @@
+     "restore": "Restaurar desta vez"
+   },
+   "appointments": {
+-    "badge": "COMPR",
+-    "openCalendar": "Abrir nos compromissos"
++    "badge": "EVENTO",
++    "openCalendar": "Abrir nos eventos do calendário"
+   }
+ }
+diff --git a/client/src/i18n/locales/pt/settings.json b/client/src/i18n/locales/pt/settings.json
+index c72d4a8..0162615 100644
+--- a/client/src/i18n/locales/pt/settings.json
++++ b/client/src/i18n/locales/pt/settings.json
+@@ -14,7 +14,7 @@
+   },
+   "notif": {
+     "title": "Notificações Push",
+-    "subtitle": "Receba lembretes dos seus compromissos diretamente neste dispositivo, mesmo com o app fechado.",
++    "subtitle": "Receba lembretes dos seus eventos do calendário diretamente neste dispositivo, mesmo com o app fechado.",
+     "unsupported": "Notificações não são suportadas neste navegador.",
+     "denied": "Permissão negada. Permita as notificações nas configurações do seu navegador.",
+     "enable": "Ativar notificações",
+@@ -50,7 +50,7 @@
+   },
+   "export": {
+     "title": "Exportar dados",
+-    "subtitle": "Baixe todos os seus dados (orçamento, tarefas, receitas, membros, compras, compromissos, rotinas, refeições) em um arquivo JSON.",
++    "subtitle": "Baixe todos os seus dados (orçamento, tarefas, receitas, membros, compras, eventos do calendário, rotinas, refeições) em um arquivo JSON.",
+     "button": "Exportar",
+     "inProgress": "Exportando…"
+   },
+@@ -73,7 +73,7 @@
+     "budget_entries": "Lançamentos financeiros",
+     "budget_limits": "Limites de orçamento",
+     "shopping_items": "Itens de compras",
+-    "appointments": "Compromissos",
++    "appointments": "Eventos do calendário",
+     "schedule_entries": "Horários da rotina"
+   },
+   "errors": {
+@@ -95,4 +95,4 @@
+     "star": "Dar estrela no GitHub",
+     "sponsorGithub": "Apoiar no GitHub"
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/client/src/i18n/locales/zh/calendar.json b/client/src/i18n/locales/zh/calendar.json
+index 8e891f8..271ff05 100644
+--- a/client/src/i18n/locales/zh/calendar.json
++++ b/client/src/i18n/locales/zh/calendar.json
+@@ -1,29 +1,42 @@
+ {
+   "loading": "正在加载日历……",
+   "title": "日历",
+-  "subtitle": "管理家庭日程",
++  "subtitle": "管理家庭日历事件",
+   "exportIcal": "导出（iCal）",
+-  "newAppointment": "新建日程",
++  "newAppointment": "新建日历事件",
+   "moreOthers": "另有 {{count}} 项",
+   "upcoming": {
+-    "title": "即将开始的日程",
+-    "empty": "暂无即将开始的日程"
++    "title": "即将开始的日历事件",
++    "empty": "暂无即将开始的日历事件"
+   },
+   "dialog": {
+-    "editTitle": "编辑日程",
+-    "createTitle": "新建日程",
+-    "description": "填写日程详情"
++    "editTitle": "编辑日历事件",
++    "createTitle": "新建日历事件",
++    "description": "填写日历事件详情"
+   },
+   "form": {
+     "title": "标题",
+-    "titlePlaceholder": "例如：医生预约",
++    "titlePlaceholder": "例如：医生事件",
+     "description": "说明（可选）",
++    "color": "颜色",
+     "descriptionPlaceholder": "更多详情……",
+     "scheduling": "时间安排",
+     "startDate": "开始日期",
+     "startTime": "开始时间",
+     "endDate": "结束日期",
+     "endTime": "结束时间",
++    "repeat": "重复",
++    "repeatNone": "不重复",
++    "repeatDaily": "每天",
++    "repeatWeekly": "每周",
++    "repeatMonthly": "每月",
++    "repeatYearly": "每年",
++    "repeatUntil": "重复至（可选）",
++    "repeatEvery": "每",
++    "repeatDays": "天",
++    "repeatWeeks": "周",
++    "repeatMonths": "个月",
++    "repeatYears": "年",
+     "location": "地点（可选）",
+     "locationPlaceholder": "例如：医生诊所",
+     "members": "家庭成员（可选）",
+@@ -37,24 +50,45 @@
+   },
+   "feed": {
+     "title": "导出日历（iCal）",
+-    "description": "通过 Apple 日历、Google 日历或 Outlook 订阅，自动同步你的日程。",
++    "description": "通过 Apple 日历、Google 日历或 Outlook 订阅，自动同步你的日历事件。",
+     "generating": "正在生成链接……",
+     "subscribeLink": "订阅链接",
+     "subscribeApple": "订阅（Apple / Outlook）",
+     "downloadIcs": "下载 .ics 文件",
+-    "privateNote": "此链接为私密链接：任何拥有链接的人都可以查看你的日程。",
++    "privateNote": "此链接为私密链接：任何拥有链接的人都可以查看你的日历事件。",
+     "regenerate": "重新生成链接"
+   },
+-  "confirmDelete": "确定要删除这项日程吗？",
++  "confirmDelete": "确定要删除这项日历事件吗？",
+   "confirmRegen": "重新生成链接？现有订阅将停止工作。",
+   "errors": {
+-    "loadAppointments": "无法加载日程。",
++    "loadAppointments": "无法加载日历事件。",
+     "loadMembers": "无法加载成员。",
+     "icalFetch": "无法获取 iCal 链接。",
+     "icalRegen": "无法重新生成链接。",
+     "startRequired": "请输入开始日期和时间。",
+     "endAfterStart": "结束时间必须晚于开始时间。",
+-    "save": "无法保存此日程。",
+-    "delete": "无法删除此日程。"
++    "save": "无法保存此日历事件。",
++    "delete": "无法删除此日历事件。"
++  },
++  "recurrenceScope": {
++    "editTitle": "编辑重复事件",
++    "editDescription": "将这些更改仅应用于本次，还是应用于整个系列？",
++    "deleteTitle": "删除重复事件",
++    "deleteDescription": "仅删除本次，还是删除整个系列？",
++    "thisOccurrence": "仅本次",
++    "allOccurrences": "全部"
++  },
++  "search": {
++    "placeholder": "搜索日历事件...",
++    "clear": "清除搜索",
++    "resultCount": "{{count}} 个匹配事件",
++    "noResults": "没有符合搜索条件的日历事件。"
++  },
++  "dayAction": {
++    "choiceDescription": "此日期已有日历事件。请选择要执行的操作。",
++    "displayDescription": "此日期的日历事件",
++    "display": "显示事件",
++    "add": "添加事件",
++    "back": "返回"
+   }
+ }
+diff --git a/client/src/i18n/locales/zh/dashboard.json b/client/src/i18n/locales/zh/dashboard.json
+index a035a74..6a888e4 100644
+--- a/client/src/i18n/locales/zh/dashboard.json
++++ b/client/src/i18n/locales/zh/dashboard.json
+@@ -11,7 +11,7 @@
+     "cta": "查看详情"
+   },
+   "stats": {
+-    "appointments": "日程",
++    "appointments": "日历事件",
+     "tasks": "任务",
+     "shopping": "购物",
+     "monthExpenses": "本月支出"
+@@ -20,8 +20,8 @@
+     "title": "今天",
+     "viewWeek": "周",
+     "emptyTitle": "暂无安排。",
+-    "emptySubtitle": "添加日程后会显示在这里。",
+-    "emptyCta": "添加日程",
++    "emptySubtitle": "添加日历事件后会显示在这里。",
++    "emptyCta": "添加日历事件",
+     "weekTitle": "本周",
+     "viewDay": "日",
+     "emptyWeekSubtitle": "本周没有约会。"
+@@ -37,15 +37,15 @@
+     "tasksCount_other": "项待完成任务"
+   },
+   "planning": {
+-    "title": "本周日程",
+-    "viewAll": "查看日程",
+-    "empty": "本周没有保存的日程。"
++    "title": "本周日历事件",
++    "viewAll": "查看日历事件",
++    "empty": "本周没有保存的日历事件。"
+   },
+   "customize": {
+     "button": "自定义",
+     "title": "自定义首页",
+     "description": "选择首页显示的内容及其顺序。此设置仅适用于您的账户。",
+-    "agendaViewLabel": "日程显示",
++    "agendaViewLabel": "日历事件显示",
+     "widgetsLabel": "显示的模块",
+     "moveUp": "上移",
+     "moveDown": "下移",
+@@ -56,8 +56,8 @@
+     "moduleDisabled": "（模块已停用）",
+     "widgets": {
+       "stats": "关键数据",
+-      "agenda": "日程（约会）",
+-      "planning": "本周日程",
++      "agenda": "日历事件",
++      "planning": "本周日历事件",
+       "quick": "快捷入口（购物、预算、任务）",
+       "notes": "家庭留言"
+     }
+diff --git a/client/src/i18n/locales/zh/integrations.json b/client/src/i18n/locales/zh/integrations.json
+index 58ae49d..390a8a4 100644
+--- a/client/src/i18n/locales/zh/integrations.json
++++ b/client/src/i18n/locales/zh/integrations.json
+@@ -26,7 +26,7 @@
+     "shopping": "购物清单",
+     "stock": "库存",
+     "calendar": "日历",
+-    "appointments": "日程",
++    "appointments": "日历事件",
+     "photos": "照片"
+   },
+   "catalog": {
+@@ -66,7 +66,7 @@
+     },
+     "nextcloud": {
+       "tagline": "个人云",
+-      "description": "将 Nextcloud 日历事件导入你的日程。",
++      "description": "将 Nextcloud 日历事件导入你的日历事件。",
+       "urlLabel": "Nextcloud URL",
+       "urlPlaceholder": "https://cloud.mydomain.com",
+       "userLabel": "用户名",
+diff --git a/client/src/i18n/locales/zh/kiosk.json b/client/src/i18n/locales/zh/kiosk.json
+index 1914934..b544f33 100644
+--- a/client/src/i18n/locales/zh/kiosk.json
++++ b/client/src/i18n/locales/zh/kiosk.json
+@@ -2,7 +2,7 @@
+   "exit": "退出",
+   "fullscreen": "全屏",
+   "exitFullscreen": "退出全屏",
+-  "schedule": "今日日程",
++  "schedule": "今日日历事件",
+   "meals": "今日餐食",
+   "tasks": "今日待办",
+   "whereabouts": "今日家庭成员去向",
+diff --git a/client/src/i18n/locales/zh/nav.json b/client/src/i18n/locales/zh/nav.json
+index 8cee01a..011204c 100644
+--- a/client/src/i18n/locales/zh/nav.json
++++ b/client/src/i18n/locales/zh/nav.json
+@@ -4,7 +4,7 @@
+     "shopping": "购物",
+     "tasks": "任务",
+     "rewards": "零用钱",
+-    "calendar": "日程",
++    "calendar": "日历事件",
+     "planning": "计划",
+     "recipes": "食谱",
+     "meals": "餐食",
+@@ -24,7 +24,7 @@
+     "title": "快捷操作",
+     "addShopping": "添加待购商品",
+     "addTask": "添加任务",
+-    "addAppointment": "添加日程",
++    "addAppointment": "添加日历事件",
+     "addSchedule": "添加计划条目",
+     "addRecipe": "添加食谱",
+     "addMeal": "添加餐食",
+diff --git a/client/src/i18n/locales/zh/planning.json b/client/src/i18n/locales/zh/planning.json
+index 662bbe9..5a71859 100644
+--- a/client/src/i18n/locales/zh/planning.json
++++ b/client/src/i18n/locales/zh/planning.json
+@@ -78,7 +78,7 @@
+     "restore": "恢复本次"
+   },
+   "appointments": {
+-    "badge": "预约",
++    "badge": "事件",
+     "openCalendar": "在日历中打开"
+   }
+ }
+diff --git a/client/src/i18n/locales/zh/settings.json b/client/src/i18n/locales/zh/settings.json
+index 39a3cbb..7da5516 100644
+--- a/client/src/i18n/locales/zh/settings.json
++++ b/client/src/i18n/locales/zh/settings.json
+@@ -14,7 +14,7 @@
+   },
+   "notif": {
+     "title": "推送通知",
+-    "subtitle": "即使应用已关闭，也能直接在此设备上收到日程提醒。",
++    "subtitle": "即使应用已关闭，也能直接在此设备上收到日历事件提醒。",
+     "unsupported": "此浏览器不支持通知。",
+     "denied": "权限被拒绝，请在浏览器设置中允许通知。",
+     "enable": "启用通知",
+@@ -50,7 +50,7 @@
+   },
+   "export": {
+     "title": "导出数据",
+-    "subtitle": "将所有数据（预算、任务、食谱、成员、购物、日程、计划、餐食）下载为 JSON 文件。",
++    "subtitle": "将所有数据（预算、任务、食谱、成员、购物、日历事件、计划、餐食）下载为 JSON 文件。",
+     "button": "导出",
+     "inProgress": "正在导出……"
+   },
+@@ -73,7 +73,7 @@
+     "budget_entries": "预算记录",
+     "budget_limits": "预算限额",
+     "shopping_items": "购物项目",
+-    "appointments": "日程",
++    "appointments": "日历事件",
+     "schedule_entries": "计划条目"
+   },
+   "errors": {
+diff --git a/client/src/pages/Calendar.tsx b/client/src/pages/Calendar.tsx
+index daa4bec..ba24f2c 100644
+--- a/client/src/pages/Calendar.tsx
++++ b/client/src/pages/Calendar.tsx
+@@ -3,14 +3,23 @@ import { useTranslation } from 'react-i18next';
+ import { useWebSocketUpdates } from '../hooks/useWebSocketUpdates';
+ import { api } from '../lib/api';
+ import { apiBase } from '../lib/serverConfig';
+-import { Plus, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Edit2, Trash2, MapPin, Clock, CalendarPlus, Copy, Check, RefreshCw } from 'lucide-react';
+-import { Card, CardContent, Button, Dialog, Input, Textarea, Badge } from '../components/ui';
++import { Plus, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Edit2, Trash2, MapPin, Clock, CalendarPlus, Copy, Check, RefreshCw, Search, X } from 'lucide-react';
++import { Card, CardContent, Button, Dialog, Input, Textarea, Badge, Select, DatePicker } from '../components/ui';
+ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, addMonths, subMonths, startOfWeek, endOfWeek, startOfDay, endOfDay } from 'date-fns';
+ import { dateLocale } from '../i18n/format';
+ import { useNavigate } from 'react-router-dom';
+ 
+ interface Appointment {
+     id: string;
++    occurrence_id?: string;
++    series_id?: string;
++    occurrence_date?: string;
++    is_recurring_occurrence?: boolean;
++    series_start_time?: string;
++    series_end_time?: string;
++    recurrence_frequency?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
++    recurrence_interval?: number;
++    recurrence_until?: string;
+     title: string;
+     description?: string;
+     start_time: string;
+@@ -21,6 +30,7 @@ interface Appointment {
+     reminder_30min: boolean;
+     reminder_1hour: boolean;
+     notes?: string;
++    color?: string;
+ }
+ 
+ interface FamilyMember {
+@@ -57,10 +67,85 @@ const addMinutes = (dateTime: string, minutes: number) => {
+     return format(base, "yyyy-MM-dd'T'HH:mm");
+ };
+ 
++const naiveDateTimeMs = (value?: string): number | null => {
++    if (!value) return null;
++
++    const match = value.replace(' ', 'T').match(
++        /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/
++    );
++
++    if (!match) return null;
++
++    const [, year, month, day, hour, minute, second = '0'] = match;
++
++    return Date.UTC(
++        Number(year),
++        Number(month) - 1,
++        Number(day),
++        Number(hour),
++        Number(minute),
++        Number(second)
++    );
++};
++
++const formatNaiveDateTimeMs = (value: number): string => {
++    const date = new Date(value);
++    const pad = (part: number) => String(part).padStart(2, '0');
++
++    return [
++        date.getUTCFullYear(),
++        '-',
++        pad(date.getUTCMonth() + 1),
++        '-',
++        pad(date.getUTCDate()),
++        'T',
++        pad(date.getUTCHours()),
++        ':',
++        pad(date.getUTCMinutes()),
++    ].join('');
++};
++
++const shiftSeriesDateTime = (
++    seriesValue: string | undefined,
++    occurrenceValue: string | undefined,
++    editedValue: string
++): string => {
++    const seriesMs = naiveDateTimeMs(seriesValue);
++    const occurrenceMs = naiveDateTimeMs(occurrenceValue);
++    const editedMs = naiveDateTimeMs(editedValue);
++
++    if (seriesMs === null || occurrenceMs === null || editedMs === null) {
++        return editedValue;
++    }
++
++    return formatNaiveDateTimeMs(seriesMs + (editedMs - occurrenceMs));
++};
++
++const APPOINTMENT_COLORS = [
++    { name: 'Red', color: '#DC2626' },
++    { name: 'Orange', color: '#F97316' },
++    { name: 'Yellow', color: '#EAB308' },
++    { name: 'Lime', color: '#84CC16' },
++    { name: 'Green', color: '#22C55E' },
++    { name: 'Dark Green', color: '#166534' },
++    { name: 'Aqua', color: '#2DD4BF' },
++    { name: 'Cyan', color: '#06B6D4' },
++    { name: 'Blue', color: '#3B82F6' },
++    { name: 'Navy', color: '#1E3A8A' },
++    { name: 'Purple', color: '#7C3AED' },
++    { name: 'Violet', color: '#A855F7' },
++    { name: 'Pink', color: '#EC4899' },
++    { name: 'Magenta', color: '#C026D3' },
++    { name: 'Brown', color: '#92400E' },
++    { name: 'Black', color: '#111827' },
++] as const;
++
+ const Calendar: React.FC = () => {
+     const { t } = useTranslation(['calendar', 'common']);
+     const [currentDate, setCurrentDate] = useState(new Date());
+     const [appointments, setAppointments] = useState<Appointment[]>([]);
++    const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
++    const [searchQuery, setSearchQuery] = useState('');
+     const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+     const [loading, setLoading] = useState(true);
+     const [dialogOpen, setDialogOpen] = useState(false);
+@@ -83,13 +168,48 @@ const Calendar: React.FC = () => {
+         reminder_30min: false,
+         reminder_1hour: false,
+         notes: '',
++        color: '#DC4A60',
++        recurrence_frequency: 'none' as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly',
++        recurrence_interval: 1,
++        recurrence_until: '',
+     });
+ 
++    const [recurrenceScopeAction, setRecurrenceScopeAction] = useState<{
++        mode: 'edit' | 'delete';
++        appointment: Appointment;
++        payload?: any;
++        returnToEditor: boolean;
++    } | null>(null);
++
++    const [dayAction, setDayAction] = useState<{
++        date: Date;
++        appointments: Appointment[];
++        mode: 'choice' | 'display';
++    } | null>(null);
++
+     useEffect(() => {
+         loadAppointments();
++        loadAllAppointments();
+         loadFamilyMembers();
+     }, [currentDate]);
+-    useWebSocketUpdates('appointments', () => { void loadAppointments(); });
++
++    useWebSocketUpdates('appointments', () => {
++        void loadAppointments();
++        void loadAllAppointments();
++    });
++
++    const loadAllAppointments = async () => {
++        try {
++            const response = await api.get<{ success: boolean; data: Appointment[] }>(
++                '/api/appointments'
++            );
++            if (response.success) {
++                setAllAppointments(response.data);
++            }
++        } catch (error) {
++            console.error('Failed to load Calendar Events for search:', error);
++        }
++    };
+ 
+     const loadAppointments = async () => {
+         try {
+@@ -180,11 +300,26 @@ const Calendar: React.FC = () => {
+         }
+ 
+         try {
++            if (
++                editingAppointment?.is_recurring_occurrence &&
++                editingAppointment.occurrence_date
++            ) {
++                setRecurrenceScopeAction({
++                    mode: 'edit',
++                    appointment: editingAppointment,
++                    payload: { ...formData },
++                    returnToEditor: true,
++                });
++                setDialogOpen(false);
++                return;
++            }
++
+             if (editingAppointment) {
+                 await api.put(`/api/appointments/${editingAppointment.id}`, formData);
+             } else {
+                 await api.post('/api/appointments', formData);
+             }
++
+             setDialogOpen(false);
+             resetForm();
+             loadAppointments();
+@@ -194,10 +329,33 @@ const Calendar: React.FC = () => {
+         }
+     };
+ 
+-    const handleDelete = async (id: string) => {
++    const handleDelete = async (
++        appointment: Appointment,
++        returnToEditor = false
++    ) => {
++        if (
++            appointment.is_recurring_occurrence &&
++            appointment.occurrence_date
++        ) {
++            setRecurrenceScopeAction({
++                mode: 'delete',
++                appointment,
++                returnToEditor,
++            });
++
++            if (returnToEditor) {
++                setDialogOpen(false);
++            }
++
++            return;
++        }
++
+         if (!confirm(t('calendar:confirmDelete'))) return;
++
+         try {
+-            await api.delete(`/api/appointments/${id}`);
++            await api.delete(`/api/appointments/${appointment.id}`);
++            setDialogOpen(false);
++            resetForm();
+             loadAppointments();
+         } catch (error) {
+             console.error('Failed to delete appointment:', error);
+@@ -205,6 +363,81 @@ const Calendar: React.FC = () => {
+         }
+     };
+ 
++    const applyRecurringScope = async (scope: 'this' | 'all') => {
++        const action = recurrenceScopeAction;
++        if (!action) return;
++
++        const { appointment } = action;
++
++        try {
++            if (action.mode === 'delete') {
++                if (scope === 'this') {
++                    await api.delete(
++                        `/api/appointments/${appointment.id}/occurrences/${appointment.occurrence_date}`
++                    );
++                } else {
++                    await api.delete(`/api/appointments/${appointment.id}`);
++                }
++            } else {
++                const payload = { ...(action.payload || {}) };
++
++                if (scope === 'this') {
++                    delete payload.recurrence_frequency;
++                    delete payload.recurrence_interval;
++                    delete payload.recurrence_until;
++
++                    await api.put(
++                        `/api/appointments/${appointment.id}/occurrences/${appointment.occurrence_date}`,
++                        payload
++                    );
++                } else {
++                    if (
++                        payload.start_time &&
++                        appointment.series_start_time &&
++                        appointment.start_time
++                    ) {
++                        payload.start_time = shiftSeriesDateTime(
++                            appointment.series_start_time,
++                            appointment.start_time,
++                            payload.start_time
++                        );
++                    }
++
++                    if (
++                        payload.end_time &&
++                        appointment.series_end_time &&
++                        appointment.end_time
++                    ) {
++                        payload.end_time = shiftSeriesDateTime(
++                            appointment.series_end_time,
++                            appointment.end_time,
++                            payload.end_time
++                        );
++                    }
++
++                    await api.put(
++                        `/api/appointments/${appointment.id}`,
++                        payload
++                    );
++                }
++            }
++
++            setRecurrenceScopeAction(null);
++            setDialogOpen(false);
++            resetForm();
++            await loadAppointments();
++        } catch (error) {
++            console.error('Recurring appointment scope action failed:', error);
++            setError(
++                error instanceof Error
++                    ? error.message
++                    : action.mode === 'delete'
++                        ? t('calendar:errors.delete')
++                        : t('calendar:errors.save')
++            );
++        }
++    };
++
+     const handleEdit = (appointment: Appointment) => {
+         setEditingAppointment(appointment);
+         setEndManuallySet(Boolean(appointment.end_time));
+@@ -212,17 +445,25 @@ const Calendar: React.FC = () => {
+             title: appointment.title,
+             description: appointment.description || '',
+             start_time: appointment.start_time.slice(0, 16),
+-            end_time: appointment.end_time ? appointment.end_time.slice(0, 16) : '',
++            end_time: appointment.end_time
++                ? appointment.end_time.slice(0, 16)
++                : '',
+             location: appointment.location || '',
+             family_member_ids: appointment.family_member_ids || [],
+             reminder_30min: appointment.reminder_30min,
+             reminder_1hour: appointment.reminder_1hour,
+             notes: appointment.notes || '',
++            color: appointment.color || '#DC4A60',
++            recurrence_frequency: appointment.recurrence_frequency || 'none',
++            recurrence_interval: appointment.recurrence_interval || 1,
++            recurrence_until: appointment.recurrence_until
++                ? appointment.recurrence_until.slice(0, 10)
++                : '',
+         });
+         setDialogOpen(true);
+     };
+ 
+-    const handleDayClick = (date: Date) => {
++    const openNewEventForDate = (date: Date) => {
+         // Always start from a clean slate: a previously opened edit dialog must
+         // not leak its appointment or form values into a new creation.
+         resetForm();
+@@ -234,6 +475,19 @@ const Calendar: React.FC = () => {
+         setDialogOpen(true);
+     };
+ 
++    const handleCalendarDayClick = (date: Date, dayAppointments: Appointment[]) => {
++        if (dayAppointments.length === 0) {
++            openNewEventForDate(date);
++            return;
++        }
++
++        setDayAction({
++            date,
++            appointments: dayAppointments,
++            mode: 'choice',
++        });
++    };
++
+     const resetForm = () => {
+         setEditingAppointment(null);
+         setEndManuallySet(false);
+@@ -247,6 +501,10 @@ const Calendar: React.FC = () => {
+             reminder_30min: false,
+             reminder_1hour: false,
+             notes: '',
++            color: '#DC4A60',
++            recurrence_frequency: 'none',
++            recurrence_interval: 1,
++            recurrence_until: '',
+         });
+     };
+ 
+@@ -324,8 +582,8 @@ const Calendar: React.FC = () => {
+ 
+     const monthStart = startOfMonth(currentDate);
+     const monthEnd = endOfMonth(currentDate);
+-    const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+-    const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
++    const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 });
++    const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
+     const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
+ 
+     const getAppointmentsForDay = (date: Date) => {
+@@ -337,7 +595,27 @@ const Calendar: React.FC = () => {
+         });
+     };
+ 
+-    const weekDays = t('common:daysShort', { returnObjects: true }) as string[];
++    const weekDaysRaw = t('common:daysShort', { returnObjects: true }) as string[];
++    const weekDays = [weekDaysRaw[6], ...weekDaysRaw.slice(0, 6)];
++
++    const normalizedSearchQuery = searchQuery.trim().toLowerCase();
++
++    const searchResults = normalizedSearchQuery
++        ? allAppointments.filter((apt) => {
++            const searchableText = [
++                apt.title,
++                apt.description,
++                apt.location,
++                apt.notes,
++                ...(apt.family_members_data || []).map((member) => member.name),
++            ]
++                .filter(Boolean)
++                .join(' ')
++                .toLowerCase();
++
++            return searchableText.includes(normalizedSearchQuery);
++        })
++        : [];
+ 
+     if (loading) {
+         return (
+@@ -367,13 +645,96 @@ const Calendar: React.FC = () => {
+                         <CalendarPlus className="w-4 h-4 mr-2" />
+                         {t('calendar:exportIcal')}
+                     </Button>
+-                    <Button onClick={() => { resetForm(); setDialogOpen(true); }}>
++                    <Button onClick={() => openNewEventForDate(new Date())}>
+                         <Plus className="w-4 h-4 mr-2" />
+                         {t('calendar:newAppointment')}
+                     </Button>
+                 </div>
+             </div>
+ 
++            {/* Calendar Events Search */}
++            <Card>
++                <CardContent className="p-4 sm:p-6">
++                    <div className="relative">
++                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
++                        <input
++                            type="search"
++                            value={searchQuery}
++                            onChange={(e) => setSearchQuery(e.target.value)}
++                            placeholder={t('calendar:search.placeholder')}
++                            className="input-nexus w-full pl-10 pr-10"
++                        />
++                        {searchQuery && (
++                            <button
++                                type="button"
++                                onClick={() => setSearchQuery('')}
++                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
++                                aria-label={t('calendar:search.clear')}
++                            >
++                                <X className="h-4 w-4" />
++                            </button>
++                        )}
++                    </div>
++
++                    {normalizedSearchQuery && (
++                        <div className="mt-4">
++                            <p className="mb-3 text-body-sm text-muted-foreground">
++                                {t('calendar:search.resultCount', { count: searchResults.length })}
++                            </p>
++
++                            {searchResults.length === 0 ? (
++                                <p className="rounded-input bg-surface-2 p-4 text-body-sm text-muted-foreground">
++                                    {t('calendar:search.noResults')}
++                                </p>
++                            ) : (
++                                <div className="space-y-2">
++                                    {searchResults.map((apt) => (
++                                        <button
++                                            key={apt.id}
++                                            type="button"
++                                            onClick={() => handleEdit(apt)}
++                                            className="flex w-full items-start gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:bg-nexus-background"
++                                        >
++                                            <span
++                                                className="mt-1 h-4 w-4 flex-shrink-0 rounded-full border border-border"
++                                                style={{ backgroundColor: apt.color || '#DC4A60' }}
++                                            />
++                                            <div className="min-w-0 flex-1">
++                                                <div className="font-semibold text-body">
++                                                    {apt.title}
++                                                </div>
++                                                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-body-sm text-muted-foreground">
++                                                    <span>
++                                                        {format(new Date(apt.start_time), 'dd MMM yyyy HH:mm', { locale: dateLocale() })}
++                                                    </span>
++                                                    {apt.location && (
++                                                        <span>{apt.location}</span>
++                                                    )}
++                                                </div>
++                                                {apt.description && (
++                                                    <p className="mt-1 line-clamp-2 text-body-sm text-muted-foreground">
++                                                        {apt.description}
++                                                    </p>
++                                                )}
++                                                {(apt.family_members_data || []).length > 0 && (
++                                                    <div className="mt-2 flex flex-wrap gap-1">
++                                                        {(apt.family_members_data || []).map((member) => (
++                                                            <Badge key={member.id} variant="primary">
++                                                                {member.name}
++                                                            </Badge>
++                                                        ))}
++                                                    </div>
++                                                )}
++                                            </div>
++                                        </button>
++                                    ))}
++                                </div>
++                            )}
++                        </div>
++                    )}
++                </CardContent>
++            </Card>
++
+             {/* Calendar Header */}
+             <Card>
+                 <CardContent className="p-6">
+@@ -427,7 +788,7 @@ const Calendar: React.FC = () => {
+                             return (
+                                 <div
+                                     key={index}
+-                                    onClick={() => isCurrentMonth && handleDayClick(day)}
++                                    onClick={() => isCurrentMonth && handleCalendarDayClick(day, dayAppointments)}
+                                     className={`
+                                         min-h-[100px] p-2 border rounded-lg cursor-pointer transition-all
+                                         ${isCurrentMonth ? 'bg-card hover:bg-nexus-background' : 'bg-surface-2 opacity-50'}
+@@ -450,17 +811,15 @@ const Calendar: React.FC = () => {
+                                     <div className="space-y-1">
+                                         {dayAppointments.slice(0, 3).map((apt) => (
+                                             <div
+-                                                key={apt.id}
++                                                key={apt.occurrence_id || apt.id}
+                                                 onClick={(e) => {
+                                                     e.stopPropagation();
+                                                     handleEdit(apt);
+                                                 }}
+                                                 className="text-[10px] p-1 rounded truncate hover:shadow-sm transition-shadow"
+                                                 style={{
+-                                                    backgroundColor: apt.family_members_data?.[0]?.color
+-                                                        ? `${apt.family_members_data[0].color}20`
+-                                                        : 'rgb(var(--primary-soft))',
+-                                                    borderLeft: `3px solid ${apt.family_members_data?.[0]?.color || 'var(--primary-base)'}`,
++                                                    backgroundColor: `${apt.color || '#DC4A60'}20`,
++                                                    borderLeft: `3px solid ${apt.color || '#DC4A60'}`,
+                                                 }}
+                                             >
+                                                 <div className="font-medium truncate">{apt.title}</div>
+@@ -493,12 +852,12 @@ const Calendar: React.FC = () => {
+                             .slice(0, 5)
+                             .map((apt) => (
+                                 <div
+-                                    key={apt.id}
++                                    key={apt.occurrence_id || apt.id}
+                                     className="flex items-start gap-4 p-4 bg-nexus-background rounded-lg hover:shadow-sm transition-shadow"
+                                 >
+                                     <div
+                                         className="w-1 h-full rounded-full"
+-                                        style={{ backgroundColor: apt.family_members_data?.[0]?.color || 'var(--primary-base)' }}
++                                        style={{ backgroundColor: apt.color || '#DC4A60' }}
+                                     />
+                                     <div className="flex-1 min-w-0">
+                                         <h4 className="font-semibold text-body mb-1 break-words">{apt.title}</h4>
+@@ -536,7 +895,7 @@ const Calendar: React.FC = () => {
+                                         <Button variant="ghost" size="sm" onClick={() => handleEdit(apt)}>
+                                             <Edit2 className="h-4 w-4" />
+                                         </Button>
+-                                        <Button variant="ghost" size="sm" onClick={() => handleDelete(apt.id)}>
++                                        <Button variant="ghost" size="sm" onClick={() => { void handleDelete(apt); }}>
+                                             <Trash2 className="h-4 w-4 text-red-500" />
+                                         </Button>
+                                     </div>
+@@ -578,15 +937,35 @@ const Calendar: React.FC = () => {
+                         placeholder={t('calendar:form.descriptionPlaceholder')}
+                         rows={3}
+                     />
++                    <div>
++                        <label className="mb-1.5 block text-label font-medium text-foreground">
++                            {t('calendar:form.color')}
++                        </label>
++                        <div className="flex flex-wrap gap-2">
++                            {APPOINTMENT_COLORS.map(({ name, color }) => (
++                                <button
++                                    key={color}
++                                    type="button"
++                                    title={name}
++                                    aria-label={name}
++                                    onClick={() => setFormData({ ...formData, color })}
++                                    className={`h-9 w-9 rounded-full border-2 transition-transform hover:scale-110 ${
++                                        formData.color === color
++                                            ? 'border-foreground ring-2 ring-offset-2 ring-foreground/30'
++                                            : 'border-border'
++                                    }`}
++                                    style={{ backgroundColor: color }}
++                                />
++                            ))}
++                        </div>
++                    </div>
+                     <div className="rounded-input border border-border bg-surface-2/40 p-3">
+                         <p className="mb-3 text-caption font-medium text-foreground">{t('calendar:form.scheduling')}</p>
+                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+-                            <Input
++                            <DatePicker
+                                 label={t('calendar:form.startDate')}
+-                                type="date"
+                                 value={selectedDate}
+-                                onChange={(e) => handleDateChange(e.target.value)}
+-                                required
++                                onChange={handleDateChange}
+                             />
+                             <Input
+                                 label={t('calendar:form.startTime')}
+@@ -595,11 +974,10 @@ const Calendar: React.FC = () => {
+                                 onChange={(e) => handleStartTimeChange(e.target.value)}
+                                 required
+                             />
+-                            <Input
++                            <DatePicker
+                                 label={t('calendar:form.endDate')}
+-                                type="date"
+                                 value={selectedEndDate}
+-                                onChange={(e) => handleEndDateChange(e.target.value)}
++                                onChange={handleEndDateChange}
+                             />
+                             <Input
+                                 label={t('calendar:form.endTime')}
+@@ -619,6 +997,80 @@ const Calendar: React.FC = () => {
+                                 +2 h
+                             </Button>
+                         </div>
++
++                        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
++                            <div>
++                                <label className="mb-1.5 block text-label font-medium text-foreground">
++                                    {t('calendar:form.repeat')}
++                                </label>
++                                <Select
++                                    value={formData.recurrence_frequency}
++                                    onValueChange={(value) =>
++                                        setFormData((prev) => ({
++                                            ...prev,
++                                            recurrence_frequency: value as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly',
++                                            recurrence_interval: 1,
++                                            recurrence_until: value === 'none' ? '' : prev.recurrence_until,
++                                        }))
++                                    }
++                                    options={[
++                                        { value: 'none', label: t('calendar:form.repeatNone') },
++                                        { value: 'daily', label: t('calendar:form.repeatDaily') },
++                                        { value: 'weekly', label: t('calendar:form.repeatWeekly') },
++                                        { value: 'monthly', label: t('calendar:form.repeatMonthly') },
++                                        { value: 'yearly', label: t('calendar:form.repeatYearly') },
++                                    ]}
++                                />
++                            </div>
++
++                            {formData.recurrence_frequency !== 'none' && (
++                                <>
++                                    <div>
++                                        <label className="mb-1.5 block text-label font-medium text-foreground">
++                                            {t('calendar:form.repeatEvery')}
++                                        </label>
++                                        <div className="flex items-center gap-2">
++                                            <Input
++                                                type="number"
++                                                min={1}
++                                                max={365}
++                                                value={String(formData.recurrence_interval)}
++                                                onChange={(e) =>
++                                                    setFormData((prev) => ({
++                                                        ...prev,
++                                                        recurrence_interval: Math.max(
++                                                            1,
++                                                            Math.min(365, Number(e.target.value) || 1)
++                                                        ),
++                                                    }))
++                                                }
++                                            />
++                                            <span className="whitespace-nowrap text-body-sm text-muted-foreground">
++                                                {formData.recurrence_frequency === 'daily'
++                                                    ? t('calendar:form.repeatDays')
++                                                    : formData.recurrence_frequency === 'weekly'
++                                                    ? t('calendar:form.repeatWeeks')
++                                                    : formData.recurrence_frequency === 'monthly'
++                                                    ? t('calendar:form.repeatMonths')
++                                                    : t('calendar:form.repeatYears')}
++                                            </span>
++                                        </div>
++                                    </div>
++
++                                    <DatePicker
++                                        label={t('calendar:form.repeatUntil')}
++                                        min={selectedDate}
++                                        value={formData.recurrence_until}
++                                        onChange={(value) =>
++                                            setFormData((prev) => ({
++                                                ...prev,
++                                                recurrence_until: value,
++                                            }))
++                                        }
++                                    />
++                                </>
++                            )}
++                        </div>
+                     </div>
+                     <Input
+                         label={t('calendar:form.location')}
+@@ -716,10 +1168,8 @@ const Calendar: React.FC = () => {
+                                     variant="ghost"
+                                     size="sm"
+                                     className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+-                                    onClick={async () => {
+-                                        setDialogOpen(false);
+-                                        await handleDelete(editingAppointment.id);
+-                                        resetForm();
++                                    onClick={() => {
++                                        void handleDelete(editingAppointment, true);
+                                     }}
+                                 >
+                                     <Trash2 className="mr-2 h-4 w-4" />
+@@ -737,6 +1187,195 @@ const Calendar: React.FC = () => {
+                 </form>
+             </Dialog>
+ 
++            {/* Calendar day Display / Add choice */}
++            <Dialog
++                open={Boolean(dayAction)}
++                onOpenChange={(open) => {
++                    if (!open) setDayAction(null);
++                }}
++                title={
++                    dayAction
++                        ? format(dayAction.date, 'EEEE, MMMM d, yyyy', { locale: dateLocale() })
++                        : ''
++                }
++                description={
++                    dayAction?.mode === 'display'
++                        ? t('calendar:dayAction.displayDescription')
++                        : t('calendar:dayAction.choiceDescription')
++                }
++            >
++                {dayAction?.mode === 'choice' ? (
++                    <div className="space-y-3">
++                        <Button
++                            type="button"
++                            className="w-full"
++                            onClick={() =>
++                                setDayAction((prev) =>
++                                    prev ? { ...prev, mode: 'display' } : prev
++                                )
++                            }
++                        >
++                            {t('calendar:dayAction.display')}
++                        </Button>
++
++                        <Button
++                            type="button"
++                            variant="secondary"
++                            className="w-full"
++                            onClick={() => {
++                                const date = dayAction.date;
++                                setDayAction(null);
++                                openNewEventForDate(date);
++                            }}
++                        >
++                            {t('calendar:dayAction.add')}
++                        </Button>
++
++                        <Button
++                            type="button"
++                            variant="ghost"
++                            className="w-full"
++                            onClick={() => setDayAction(null)}
++                        >
++                            {t('common:actions.cancel')}
++                        </Button>
++                    </div>
++                ) : dayAction ? (
++                    <div className="space-y-3">
++                        {dayAction.appointments
++                            .slice()
++                            .sort(
++                                (a, b) =>
++                                    new Date(a.start_time).getTime() -
++                                    new Date(b.start_time).getTime()
++                            )
++                            .map((apt) => (
++                                <button
++                                    key={apt.occurrence_id || apt.id}
++                                    type="button"
++                                    onClick={() => {
++                                        setDayAction(null);
++                                        handleEdit(apt);
++                                    }}
++                                    className="flex w-full items-start gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:bg-nexus-background"
++                                >
++                                    <span
++                                        className="mt-1 h-4 w-4 flex-shrink-0 rounded-full border border-border"
++                                        style={{ backgroundColor: apt.color || '#DC4A60' }}
++                                    />
++                                    <div className="min-w-0 flex-1">
++                                        <div className="font-semibold text-body">
++                                            {apt.title}
++                                        </div>
++                                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-body-sm text-muted-foreground">
++                                            <span>
++                                                {format(new Date(apt.start_time), 'HH:mm')}
++                                                {apt.end_time &&
++                                                    ` - ${format(new Date(apt.end_time), 'HH:mm')}`}
++                                            </span>
++                                            {apt.location && <span>{apt.location}</span>}
++                                        </div>
++                                        {apt.description && (
++                                            <p className="mt-1 line-clamp-2 text-body-sm text-muted-foreground">
++                                                {apt.description}
++                                            </p>
++                                        )}
++                                    </div>
++                                </button>
++                            ))}
++
++                        <div className="flex flex-col gap-2 pt-2 sm:flex-row">
++                            <Button
++                                type="button"
++                                className="flex-1"
++                                onClick={() => {
++                                    const date = dayAction.date;
++                                    setDayAction(null);
++                                    openNewEventForDate(date);
++                                }}
++                            >
++                                {t('calendar:dayAction.add')}
++                            </Button>
++
++                            <Button
++                                type="button"
++                                variant="secondary"
++                                className="flex-1"
++                                onClick={() =>
++                                    setDayAction((prev) =>
++                                        prev ? { ...prev, mode: 'choice' } : prev
++                                    )
++                                }
++                            >
++                                {t('calendar:dayAction.back')}
++                            </Button>
++                        </div>
++                    </div>
++                ) : null}
++            </Dialog>
++
++            {/* Recurring appointment scope choice */}
++            <Dialog
++                open={Boolean(recurrenceScopeAction)}
++                onOpenChange={(open) => {
++                    if (!open && recurrenceScopeAction) {
++                        const returnToEditor = recurrenceScopeAction.returnToEditor;
++                        setRecurrenceScopeAction(null);
++
++                        if (returnToEditor) {
++                            setDialogOpen(true);
++                        }
++                    }
++                }}
++                title={
++                    recurrenceScopeAction?.mode === 'delete'
++                        ? t('calendar:recurrenceScope.deleteTitle')
++                        : t('calendar:recurrenceScope.editTitle')
++                }
++                description={
++                    recurrenceScopeAction?.mode === 'delete'
++                        ? t('calendar:recurrenceScope.deleteDescription')
++                        : t('calendar:recurrenceScope.editDescription')
++                }
++            >
++                <div className="space-y-3">
++                    <Button
++                        type="button"
++                        className="w-full"
++                        onClick={() => { void applyRecurringScope('this'); }}
++                    >
++                        {t('calendar:recurrenceScope.thisOccurrence')}
++                    </Button>
++
++                    <Button
++                        type="button"
++                        variant="secondary"
++                        className="w-full"
++                        onClick={() => { void applyRecurringScope('all'); }}
++                    >
++                        {t('calendar:recurrenceScope.allOccurrences')}
++                    </Button>
++
++                    <Button
++                        type="button"
++                        variant="ghost"
++                        className="w-full"
++                        onClick={() => {
++                            const returnToEditor =
++                                recurrenceScopeAction?.returnToEditor || false;
++
++                            setRecurrenceScopeAction(null);
++
++                            if (returnToEditor) {
++                                setDialogOpen(true);
++                            }
++                        }}
++                    >
++                        {t('common:actions.cancel')}
++                    </Button>
++                </div>
++            </Dialog>
++
+             {/* Dialog export iCal */}
+             <Dialog
+                 open={feedDialogOpen}
+diff --git a/client/src/pages/Dashboard.tsx b/client/src/pages/Dashboard.tsx
+index e50bcd6..3d2ee27 100644
+--- a/client/src/pages/Dashboard.tsx
++++ b/client/src/pages/Dashboard.tsx
+@@ -25,6 +25,7 @@ interface DashboardStats {
+ 
+ interface Appointment {
+     id: string;
++    occurrence_id?: string;
+     title: string;
+     description?: string;
+     start_time: string;
+@@ -226,7 +227,7 @@ const Dashboard: React.FC = () => {
+                             )}
+                             <div className="rounded-card border border-border bg-card divide-y divide-border overflow-hidden">
+                                 {group.items.map((appt) => (
+-                                    <div key={appt.id} className="grid grid-cols-[72px_1fr_auto] gap-4 items-center px-5 py-4">
++                                    <div key={appt.occurrence_id || appt.id} className="grid grid-cols-[72px_1fr_auto] gap-4 items-center px-5 py-4">
+                                         <div className="font-serif text-body text-muted-foreground tabular-nums">
+                                             {fmtTime(appt.start_time)}
+                                         </div>
+diff --git a/client/src/pages/Kiosk.tsx b/client/src/pages/Kiosk.tsx
+index a0274c5..cf96cc5 100644
+--- a/client/src/pages/Kiosk.tsx
++++ b/client/src/pages/Kiosk.tsx
+@@ -14,7 +14,7 @@ import { cn } from '../lib/utils';
+ import FamilyNotes, { type FamilyNote } from '../components/app/FamilyNotes';
+ 
+ interface Member { id: string; name: string; color: string }
+-interface Appointment { id: string; title: string; start_time: string; end_time?: string; location?: string; family_members_data?: Member[] }
++interface Appointment { id: string; occurrence_id?: string; title: string; start_time: string; end_time?: string; location?: string; family_members_data?: Member[] }
+ interface Task { id: string; title: string; is_completed: boolean; priority?: string; due_date?: string; points?: number; assigned_to_members?: Member[] }
+ interface MealPlan { id: string; date: string; meal_type: string; custom_meal?: string; recipe?: { name: string } }
+ interface PlanningEntry { id: string; family_member_name: string; family_member_color: string; schedule_type: string; title: string; day_of_week: number; start_time: string; end_time: string; location?: string }
+@@ -447,7 +447,7 @@ const Kiosk: React.FC = () => {
+                     ) : (
+                         <div className="divide-y divide-border">
+                             {todayAppointments.map((a) => (
+-                                <div key={a.id} className="grid grid-cols-[110px_1fr] items-baseline gap-4 py-4">
++                                <div key={a.occurrence_id || a.id} className="grid grid-cols-[110px_1fr] items-baseline gap-4 py-4">
+                                     <div className="font-serif text-[clamp(1.4rem,2.4vw,2rem)] tabular-nums text-muted-foreground">
+                                         {hhmm(a.start_time)}
+                                     </div>
+diff --git a/client/src/pages/Planning.tsx b/client/src/pages/Planning.tsx
+index 1f625d2..3d430fc 100644
+--- a/client/src/pages/Planning.tsx
++++ b/client/src/pages/Planning.tsx
+@@ -63,6 +63,7 @@ interface PlanningEntry {
+ /** An appointment shown alongside the planning, read-only. */
+ interface WeekAppointment {
+     id: string;
++    occurrence_id?: string;
+     title: string;
+     start_time: string;
+     end_time?: string | null;
+@@ -758,7 +759,7 @@ const Planning: React.FC = () => {
+                                     guests; tapping one goes there. */}
+                                 {dayAppointments.map((appointment) => (
+                                     <button
+-                                        key={appointment.id}
++                                        key={appointment.occurrence_id || appointment.id}
+                                         type="button"
+                                         onClick={() => navigate('/calendar')}
+                                         title={t('planning:appointments.openCalendar')}
+diff --git a/client/src/pages/Recipes.tsx b/client/src/pages/Recipes.tsx
+index 958346e..deb7d15 100644
+--- a/client/src/pages/Recipes.tsx
++++ b/client/src/pages/Recipes.tsx
+@@ -600,8 +600,16 @@ const Recipes: React.FC = () => {
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                     {filteredRecipes.map((recipe) => (
+                         <Card key={recipe.id} className="hover:shadow-lg transition-shadow overflow-hidden">
+-                            <div className="h-40 bg-gradient-to-br from-nexus-blue/10 to-nexus-amber/10 flex items-center justify-center">
+-                                <ChefHat className="h-16 w-16 text-nexus-blue/30" />
++                            <div className="h-40 bg-gradient-to-br from-nexus-blue/10 to-nexus-amber/10 flex items-center justify-center overflow-hidden">
++                                {recipe.image_url ? (
++                                    <img
++                                        src={recipe.image_url}
++                                        alt={recipe.name}
++                                        className="w-full h-full object-cover"
++                                    />
++                                ) : (
++                                    <ChefHat className="h-16 w-16 text-nexus-blue/30" />
++                                )}
+                             </div>
+                             <CardContent className="p-4">
+                                 <div className="flex items-start justify-between mb-2">
+diff --git a/server/src/db.ts b/server/src/db.ts
+index 50d9d95..2cee9f5 100644
+--- a/server/src/db.ts
++++ b/server/src/db.ts
+@@ -360,6 +360,21 @@ export const runMigrations = async () => {
+             created_at TIMESTAMPTZ DEFAULT now(),
+             PRIMARY KEY (entry_id, excluded_date)
+         )`,
++        // Migration 023: recurring calendar appointments.
++        "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS recurrence_frequency VARCHAR(16) NOT NULL DEFAULT 'none'",
++        "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS recurrence_interval INTEGER NOT NULL DEFAULT 1",
++        "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS recurrence_until DATE",
++        `CREATE TABLE IF NOT EXISTS appointment_recurrence_exceptions (
++            appointment_id UUID NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
++            occurrence_date DATE NOT NULL,
++            exception_type VARCHAR(16) NOT NULL DEFAULT 'skip',
++            override_data JSONB,
++            created_at TIMESTAMPTZ DEFAULT now(),
++            PRIMARY KEY (appointment_id, occurrence_date)
++        )`,
++        'CREATE INDEX IF NOT EXISTS idx_appointment_recurrence_exceptions_appointment ON appointment_recurrence_exceptions(appointment_id)',
++        // Migration 024: shared color for calendar appointments.
++        "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS color VARCHAR(7) NOT NULL DEFAULT '#DC4A60'",
+     ];
+ 
+     for (const migration of migrations) {
+diff --git a/server/src/lib/notifications.ts b/server/src/lib/notifications.ts
+index 39291a4..34af616 100644
+--- a/server/src/lib/notifications.ts
++++ b/server/src/lib/notifications.ts
+@@ -14,10 +14,25 @@ export interface CreateNotificationInput {
+     url?: string;
+ }
+ 
++type NotificationLanguage = 'en' | 'fr' | 'zh';
++
++export interface LocalizedNotificationText {
++    title: string;
++    message: string;
++}
++
++export interface CreateLocalizedNotificationInput {
++    userId: string;
++    type: string;
++    texts: Record<NotificationLanguage, LocalizedNotificationText>;
++    relatedId?: string | null;
++    url?: string;
++}
++
+ /**
+  * Persist an in-app notification, broadcast a WebSocket refresh and send a web-push
+- * message (best effort). Never throws — notification delivery must not break the
+- * originating request.
++ * message (best effort). Never throws because notification delivery must not break
++ * the originating request.
+  */
+ export async function createNotification(input: CreateNotificationInput): Promise<void> {
+     try {
+@@ -42,3 +57,43 @@ export async function createNotification(input: CreateNotificationInput): Promis
+         });
+     }
+ }
++
++/**
++ * Create a notification using the recipient account's saved language.
++ * Unknown or missing languages fall back to French to preserve OpenFamily's
++ * existing default behavior.
++ */
++export async function createLocalizedNotification(
++    input: CreateLocalizedNotificationInput
++): Promise<void> {
++    let language: NotificationLanguage = 'fr';
++
++    try {
++        const result = await query(
++            'SELECT language FROM users WHERE id = $1',
++            [input.userId]
++        );
++
++        const savedLanguage = result.rows[0]?.language;
++
++        if (savedLanguage === 'en' || savedLanguage === 'fr' || savedLanguage === 'zh') {
++            language = savedLanguage;
++        }
++    } catch (err) {
++        logger.warn('notification.language_lookup_failed', {
++            userId: input.userId,
++            error: err instanceof Error ? err.message : String(err),
++        });
++    }
++
++    const text = input.texts[language];
++
++    await createNotification({
++        userId: input.userId,
++        title: text.title,
++        message: text.message,
++        type: input.type,
++        relatedId: input.relatedId,
++        url: input.url,
++    });
++}
+diff --git a/server/src/routes/appointments.ts b/server/src/routes/appointments.ts
+index 6022f94..7abbdfd 100644
+--- a/server/src/routes/appointments.ts
++++ b/server/src/routes/appointments.ts
+@@ -7,6 +7,38 @@ import { broadcast } from '../lib/broadcaster';
+ const router = Router();
+ router.use(authMiddleware);
+ 
++type RecurrenceFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
++
++const VALID_RECURRENCE_FREQUENCIES = new Set<RecurrenceFrequency>([
++    'none',
++    'daily',
++    'weekly',
++    'monthly',
++    'yearly',
++]);
++
++const normalizeRecurrenceFrequency = (value: unknown): RecurrenceFrequency => {
++    if (typeof value !== 'string') return 'none';
++
++    const normalized = value.trim().toLowerCase() as RecurrenceFrequency;
++    return VALID_RECURRENCE_FREQUENCIES.has(normalized) ? normalized : 'none';
++};
++
++const normalizeRecurrenceInterval = (value: unknown): number => {
++    const interval = Number(value);
++    if (!Number.isInteger(interval) || interval < 1 || interval > 365) {
++        return 1;
++    }
++    return interval;
++};
++
++const normalizeAppointmentColor = (value: unknown): string => {
++    if (typeof value !== 'string') return '#DC4A60';
++
++    const normalized = value.trim().toUpperCase();
++    return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : '#DC4A60';
++};
++
+ const ensureMembersBelongToUser = async (memberIds: string[], userId: string) => {
+     for (const memberId of memberIds) {
+         const member = await query(
+@@ -36,6 +68,285 @@ const enrichAppointmentsWithMembers = async (appointments: any[], userId: string
+     });
+ };
+ 
++const parseNaiveDateTime = (value: string): Date | null => {
++    const match = value.match(
++        /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/
++    );
++    if (!match) return null;
++
++    const [, year, month, day, hour, minute, second = '0'] = match;
++    const date = new Date(Date.UTC(
++        Number(year),
++        Number(month) - 1,
++        Number(day),
++        Number(hour),
++        Number(minute),
++        Number(second)
++    ));
++
++    return Number.isNaN(date.getTime()) ? null : date;
++};
++
++const formatNaiveDateTime = (date: Date): string => {
++    const pad = (value: number) => String(value).padStart(2, '0');
++
++    return [
++        date.getUTCFullYear(),
++        '-',
++        pad(date.getUTCMonth() + 1),
++        '-',
++        pad(date.getUTCDate()),
++        'T',
++        pad(date.getUTCHours()),
++        ':',
++        pad(date.getUTCMinutes()),
++        ':',
++        pad(date.getUTCSeconds()),
++    ].join('');
++};
++
++const formatDateOnly = (date: Date): string => {
++    return formatNaiveDateTime(date).slice(0, 10);
++};
++
++const getOccurrenceDate = (
++    base: Date,
++    frequency: RecurrenceFrequency,
++    interval: number,
++    occurrenceIndex: number
++): Date | null => {
++    if (occurrenceIndex === 0) {
++        return new Date(base.getTime());
++    }
++
++    if (frequency === 'daily') {
++        const date = new Date(base.getTime());
++        date.setUTCDate(date.getUTCDate() + occurrenceIndex * interval);
++        return date;
++    }
++
++    if (frequency === 'weekly') {
++        const date = new Date(base.getTime());
++        date.setUTCDate(date.getUTCDate() + occurrenceIndex * interval * 7);
++        return date;
++    }
++
++    if (frequency === 'monthly') {
++        const baseMonth = base.getUTCFullYear() * 12 + base.getUTCMonth();
++        const targetMonth = baseMonth + occurrenceIndex * interval;
++        const year = Math.floor(targetMonth / 12);
++        const month = targetMonth % 12;
++        const day = base.getUTCDate();
++
++        const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
++
++        // A monthly event on the 29th, 30th or 31st skips months that
++        // do not contain that calendar date rather than silently moving it.
++        if (day > daysInMonth) {
++            return null;
++        }
++
++        return new Date(Date.UTC(
++            year,
++            month,
++            day,
++            base.getUTCHours(),
++            base.getUTCMinutes(),
++            base.getUTCSeconds()
++        ));
++    }
++
++    if (frequency === 'yearly') {
++        const year = base.getUTCFullYear() + occurrenceIndex * interval;
++        const month = base.getUTCMonth();
++        const day = base.getUTCDate();
++
++        const date = new Date(Date.UTC(
++            year,
++            month,
++            day,
++            base.getUTCHours(),
++            base.getUTCMinutes(),
++            base.getUTCSeconds()
++        ));
++
++        // Feb 29 yearly events occur only in leap years.
++        if (date.getUTCMonth() !== month || date.getUTCDate() !== day) {
++            return null;
++        }
++
++        return date;
++    }
++
++    return null;
++};
++
++const estimateOccurrenceIndex = (
++    base: Date,
++    target: Date,
++    frequency: RecurrenceFrequency,
++    interval: number
++): number => {
++    if (target.getTime() <= base.getTime()) return 0;
++
++    if (frequency === 'daily' || frequency === 'weekly') {
++        const days = Math.floor((target.getTime() - base.getTime()) / 86400000);
++        const stepDays = frequency === 'weekly' ? interval * 7 : interval;
++        return Math.max(0, Math.floor(days / stepDays) - 1);
++    }
++
++    if (frequency === 'monthly') {
++        const months =
++            (target.getUTCFullYear() - base.getUTCFullYear()) * 12 +
++            (target.getUTCMonth() - base.getUTCMonth());
++
++        return Math.max(0, Math.floor(months / interval) - 1);
++    }
++
++    if (frequency === 'yearly') {
++        const years = target.getUTCFullYear() - base.getUTCFullYear();
++        return Math.max(0, Math.floor(years / interval) - 1);
++    }
++
++    return 0;
++};
++
++const expandRecurringAppointments = (
++    appointments: any[],
++    rangeStartValue: string,
++    rangeEndValue: string,
++    exceptionsByAppointment: Map<string, Map<string, any>>
++): any[] => {
++    const rangeStart = parseNaiveDateTime(rangeStartValue);
++    const rangeEnd = parseNaiveDateTime(rangeEndValue);
++
++    if (!rangeStart || !rangeEnd) {
++        return appointments;
++    }
++
++    const expanded: any[] = [];
++
++    for (const appointment of appointments) {
++        const frequency = normalizeRecurrenceFrequency(appointment.recurrence_frequency);
++
++        if (frequency === 'none') {
++            expanded.push(appointment);
++            continue;
++        }
++
++        const baseStart = parseNaiveDateTime(String(appointment.start_time));
++        if (!baseStart) {
++            expanded.push(appointment);
++            continue;
++        }
++
++        const baseEnd = appointment.end_time
++            ? parseNaiveDateTime(String(appointment.end_time))
++            : null;
++
++        const durationMs = baseEnd
++            ? Math.max(0, baseEnd.getTime() - baseStart.getTime())
++            : 0;
++
++        const interval = normalizeRecurrenceInterval(appointment.recurrence_interval);
++        const recurrenceUntil = appointment.recurrence_until
++            ? String(appointment.recurrence_until).slice(0, 10)
++            : null;
++
++        // Look back by the event duration so an occurrence beginning before
++        // the requested range but ending inside it is still included.
++        const searchStart = new Date(rangeStart.getTime() - durationMs);
++        let occurrenceIndex = estimateOccurrenceIndex(
++            baseStart,
++            searchStart,
++            frequency,
++            interval
++        );
++
++        // The estimate places us close to the requested range, avoiding a
++        // potentially huge loop for old daily/weekly recurring events.
++        for (let safety = 0; safety < 10000; safety++, occurrenceIndex++) {
++            const occurrenceStart = getOccurrenceDate(
++                baseStart,
++                frequency,
++                interval,
++                occurrenceIndex
++            );
++
++            // Invalid monthly/yearly dates are intentionally skipped.
++            if (!occurrenceStart) {
++                continue;
++            }
++
++            if (occurrenceStart.getTime() > rangeEnd.getTime()) {
++                break;
++            }
++
++            const occurrenceDate = formatDateOnly(occurrenceStart);
++
++            if (recurrenceUntil && occurrenceDate > recurrenceUntil) {
++                break;
++            }
++
++            const exception =
++                exceptionsByAppointment
++                    .get(String(appointment.id))
++                    ?.get(occurrenceDate);
++
++            if (exception?.exception_type === 'skip') {
++                continue;
++            }
++
++            const occurrenceEnd = new Date(
++                occurrenceStart.getTime() + durationMs
++            );
++
++            if (
++                occurrenceEnd.getTime() < rangeStart.getTime() ||
++                occurrenceStart.getTime() > rangeEnd.getTime()
++            ) {
++                continue;
++            }
++
++            const overrideData =
++                exception?.override_data &&
++                typeof exception.override_data === 'object' &&
++                !Array.isArray(exception.override_data)
++                    ? exception.override_data
++                    : {};
++
++            expanded.push({
++                ...appointment,
++                ...overrideData,
++
++                id: appointment.id,
++                series_id: appointment.id,
++                occurrence_id: `${appointment.id}:${occurrenceDate}`,
++                occurrence_date: occurrenceDate,
++                is_recurring_occurrence: true,
++                series_start_time: appointment.start_time,
++                series_end_time: appointment.end_time,
++
++                start_time:
++                    typeof overrideData.start_time === 'string'
++                        ? overrideData.start_time
++                        : formatNaiveDateTime(occurrenceStart),
++
++                end_time:
++                    overrideData.end_time !== undefined
++                        ? overrideData.end_time
++                        : appointment.end_time
++                            ? formatNaiveDateTime(occurrenceEnd)
++                            : null,
++            });
++        }
++    }
++
++    return expanded.sort((a, b) =>
++        String(a.start_time).localeCompare(String(b.start_time))
++    );
++};
++
+ // Get all appointments
+ router.get('/', async (req: AuthRequest, res) => {
+     try {
+@@ -44,20 +355,97 @@ router.get('/', async (req: AuthRequest, res) => {
+         let queryText = 'SELECT * FROM appointments WHERE user_id = $1';
+         const params: any[] = [req.userId];
+ 
++        const nonRecurringConditions: string[] = [];
++        const recurringConditions: string[] = [];
++
+         if (start_date) {
+             params.push(start_date);
+-            queryText += ` AND COALESCE(end_time, start_time) >= $${params.length}`;
++            const parameter = `$${params.length}`;
++
++            nonRecurringConditions.push(
++                `COALESCE(end_time, start_time) >= ${parameter}`
++            );
++            recurringConditions.push(
++                `(recurrence_until IS NULL OR recurrence_until >= (${parameter})::date)`
++            );
+         }
+ 
+         if (end_date) {
+             params.push(end_date);
+-            queryText += ` AND start_time <= $${params.length}`;
++            const parameter = `$${params.length}`;
++
++            nonRecurringConditions.push(`start_time <= ${parameter}`);
++            recurringConditions.push(`start_time <= ${parameter}`);
++        }
++
++        if (nonRecurringConditions.length > 0) {
++            queryText += ` AND (
++                (
++                    recurrence_frequency = 'none'
++                    AND ${nonRecurringConditions.join(' AND ')}
++                )
++                OR
++                (
++                    recurrence_frequency <> 'none'
++                    AND ${recurringConditions.join(' AND ')}
++                )
++            )`;
+         }
+ 
+         queryText += ' ORDER BY start_time ASC';
+ 
+         const result = await query(queryText, params);
+-        const appointments = await enrichAppointmentsWithMembers(result.rows, req.userId!);
++
++        const exceptionsByAppointment = new Map<string, Map<string, any>>();
++
++        if (start_date && end_date && result.rows.length > 0) {
++            const recurringIds = result.rows
++                .filter((row: any) => row.recurrence_frequency !== 'none')
++                .map((row: any) => row.id);
++
++            if (recurringIds.length > 0) {
++                const exceptionResult = await query(
++                    `SELECT appointment_id, occurrence_date, exception_type, override_data
++                     FROM appointment_recurrence_exceptions
++                     WHERE appointment_id = ANY($1::uuid[])
++                       AND occurrence_date BETWEEN ($2)::date AND ($3)::date`,
++                    [
++                        recurringIds,
++                        String(start_date).slice(0, 10),
++                        String(end_date).slice(0, 10),
++                    ]
++                );
++
++                for (const exception of exceptionResult.rows) {
++                    const appointmentId = String(exception.appointment_id);
++                    const occurrenceDate = String(exception.occurrence_date).slice(0, 10);
++
++                    if (!exceptionsByAppointment.has(appointmentId)) {
++                        exceptionsByAppointment.set(appointmentId, new Map());
++                    }
++
++                    exceptionsByAppointment
++                        .get(appointmentId)!
++                        .set(occurrenceDate, exception);
++                }
++            }
++        }
++
++        const rows =
++            start_date && end_date
++                ? expandRecurringAppointments(
++                    result.rows,
++                    String(start_date),
++                    String(end_date),
++                    exceptionsByAppointment
++                )
++                : result.rows;
++
++        const appointments = await enrichAppointmentsWithMembers(
++            rows,
++            req.userId!
++        );
++
+         res.json({ success: true, data: appointments });
+     } catch (error) {
+         console.error('Get appointments error:', error);
+@@ -78,23 +466,51 @@ router.post('/', async (req: AuthRequest, res) => {
+             reminder_30min,
+             reminder_1hour,
+             notes,
++            recurrence_frequency,
++            recurrence_interval,
++            recurrence_until,
++            color,
+         } = req.body;
+ 
+         const cleanedTitle = typeof title === 'string' ? title.trim() : '';
+         const startTime = toNullIfEmpty(start_time);
++        const recurrenceFrequency = normalizeRecurrenceFrequency(recurrence_frequency);
++        const recurrenceInterval = recurrenceFrequency === 'none'
++            ? 1
++            : normalizeRecurrenceInterval(recurrence_interval);
++        const recurrenceUntil = recurrenceFrequency === 'none'
++            ? null
++            : toNullIfEmpty(recurrence_until);
+ 
+         if (!cleanedTitle || !startTime) {
+             return res.status(400).json({ success: false, error: 'Title and start_time are required' });
+         }
+ 
++        if (recurrenceUntil) {
++            const startDate = String(startTime).slice(0, 10);
++            if (String(recurrenceUntil).slice(0, 10) < startDate) {
++                return res.status(400).json({
++                    success: false,
++                    error: 'recurrence_until cannot be before start_time',
++                });
++            }
++        }
++
+         const memberIds: string[] = Array.isArray(family_member_ids)
+             ? family_member_ids.filter((id: any) => typeof id === 'string' && id.trim())
+             : [];
+         await ensureMembersBelongToUser(memberIds, req.userId!);
+ 
+         const result = await query(
+-            `INSERT INTO appointments (user_id, title, description, start_time, end_time, location, family_member_ids, reminder_30min, reminder_1hour, notes)
+-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10) RETURNING *`,
++            `INSERT INTO appointments (
++                user_id, title, description, start_time, end_time, location,
++                family_member_ids, reminder_30min, reminder_1hour, notes,
++                recurrence_frequency, recurrence_interval, recurrence_until, color
++            )
++            VALUES (
++                $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10,
++                $11, $12, $13, $14
++            ) RETURNING *`,
+             [
+                 req.userId,
+                 cleanedTitle,
+@@ -106,6 +522,10 @@ router.post('/', async (req: AuthRequest, res) => {
+                 Boolean(reminder_30min),
+                 Boolean(reminder_1hour),
+                 toNullIfEmpty(notes),
++                recurrenceFrequency,
++                recurrenceInterval,
++                recurrenceUntil,
++                normalizeAppointmentColor(color),
+             ]
+         );
+ 
+@@ -136,6 +556,10 @@ router.put('/:id', async (req: AuthRequest, res) => {
+             reminder_30min,
+             reminder_1hour,
+             notes,
++            recurrence_frequency,
++            recurrence_interval,
++            recurrence_until,
++            color,
+         } = req.body;
+ 
+         const updates: string[] = [];
+@@ -195,6 +619,28 @@ router.put('/:id', async (req: AuthRequest, res) => {
+             pushUpdate('notes', toNullIfEmpty(notes));
+         }
+ 
++        if (color !== undefined) {
++            pushUpdate('color', normalizeAppointmentColor(color));
++        }
++
++        if (recurrence_frequency !== undefined) {
++            const frequency = normalizeRecurrenceFrequency(recurrence_frequency);
++            pushUpdate('recurrence_frequency', frequency);
++
++            if (frequency === 'none') {
++                pushUpdate('recurrence_interval', 1);
++                pushUpdate('recurrence_until', null);
++            }
++        }
++
++        if (recurrence_interval !== undefined && recurrence_frequency !== 'none') {
++            pushUpdate('recurrence_interval', normalizeRecurrenceInterval(recurrence_interval));
++        }
++
++        if (recurrence_until !== undefined && recurrence_frequency !== 'none') {
++            pushUpdate('recurrence_until', toNullIfEmpty(recurrence_until));
++        }
++
+         if (updates.length === 0) {
+             return res.status(400).json({ success: false, error: 'No fields to update' });
+         }
+@@ -224,6 +670,179 @@ router.put('/:id', async (req: AuthRequest, res) => {
+     }
+ });
+ 
++// Update one occurrence from a recurring appointment
++router.put('/:id/occurrences/:date', async (req: AuthRequest, res) => {
++    try {
++        const { id, date } = req.params;
++
++        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
++            return res.status(400).json({ success: false, error: 'Invalid occurrence date' });
++        }
++
++        const appointmentResult = await query(
++            `SELECT *
++             FROM appointments
++             WHERE id = $1 AND user_id = $2`,
++            [id, req.userId]
++        );
++
++        if (appointmentResult.rows.length === 0) {
++            return res.status(404).json({ success: false, error: 'Appointment not found' });
++        }
++
++        const appointment = appointmentResult.rows[0];
++
++        if (appointment.recurrence_frequency === 'none') {
++            return res.status(400).json({
++                success: false,
++                error: 'Appointment is not recurring',
++            });
++        }
++
++        const allowedFields = [
++            'title',
++            'description',
++            'start_time',
++            'end_time',
++            'location',
++            'family_member_ids',
++            'reminder_30min',
++            'reminder_1hour',
++            'notes',
++            'color',
++        ];
++
++        const overrideData: Record<string, any> = {};
++
++        for (const field of allowedFields) {
++            if (req.body[field] !== undefined) {
++                overrideData[field] = req.body[field];
++            }
++        }
++
++        if (overrideData.title !== undefined) {
++            const cleanedTitle =
++                typeof overrideData.title === 'string'
++                    ? overrideData.title.trim()
++                    : '';
++
++            if (!cleanedTitle) {
++                return res.status(400).json({
++                    success: false,
++                    error: 'Title cannot be empty',
++                });
++            }
++
++            overrideData.title = cleanedTitle;
++        }
++
++        if (overrideData.color !== undefined) {
++            overrideData.color = normalizeAppointmentColor(overrideData.color);
++        }
++
++        if (overrideData.family_member_ids !== undefined) {
++            const memberIds: string[] = Array.isArray(overrideData.family_member_ids)
++                ? overrideData.family_member_ids.filter(
++                    (memberId: any) =>
++                        typeof memberId === 'string' && memberId.trim()
++                )
++                : [];
++
++            await ensureMembersBelongToUser(memberIds, req.userId!);
++            overrideData.family_member_ids = memberIds;
++        }
++
++        await query(
++            `INSERT INTO appointment_recurrence_exceptions
++                (appointment_id, occurrence_date, exception_type, override_data)
++             VALUES ($1, $2::date, 'override', $3::jsonb)
++             ON CONFLICT (appointment_id, occurrence_date)
++             DO UPDATE SET
++                exception_type = 'override',
++                override_data = EXCLUDED.override_data`,
++            [id, date, JSON.stringify(overrideData)]
++        );
++
++        broadcast(req.userId!, {
++            type: 'update',
++            entity: 'appointments',
++            action: 'updated',
++        });
++
++        res.json({
++            success: true,
++            message: 'Appointment occurrence updated',
++        });
++    } catch (error) {
++        if (error instanceof Error && error.message === 'INVALID_MEMBER') {
++            return res.status(400).json({
++                success: false,
++                error: 'Family member not found',
++            });
++        }
++
++        console.error('Update appointment occurrence error:', error);
++        res.status(500).json({
++            success: false,
++            error: 'Internal server error',
++        });
++    }
++});
++
++// Delete one occurrence from a recurring appointment
++router.delete('/:id/occurrences/:date', async (req: AuthRequest, res) => {
++    try {
++        const { id, date } = req.params;
++
++        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
++            return res.status(400).json({ success: false, error: 'Invalid occurrence date' });
++        }
++
++        const appointmentResult = await query(
++            `SELECT id, recurrence_frequency
++             FROM appointments
++             WHERE id = $1 AND user_id = $2`,
++            [id, req.userId]
++        );
++
++        if (appointmentResult.rows.length === 0) {
++            return res.status(404).json({ success: false, error: 'Appointment not found' });
++        }
++
++        if (appointmentResult.rows[0].recurrence_frequency === 'none') {
++            return res.status(400).json({
++                success: false,
++                error: 'Appointment is not recurring',
++            });
++        }
++
++        await query(
++            `INSERT INTO appointment_recurrence_exceptions
++                (appointment_id, occurrence_date, exception_type, override_data)
++             VALUES ($1, $2::date, 'skip', NULL)
++             ON CONFLICT (appointment_id, occurrence_date)
++             DO UPDATE SET
++                exception_type = 'skip',
++                override_data = NULL`,
++            [id, date]
++        );
++
++        broadcast(req.userId!, {
++            type: 'update',
++            entity: 'appointments',
++            action: 'updated',
++        });
++
++        res.json({
++            success: true,
++            message: 'Appointment occurrence deleted',
++        });
++    } catch (error) {
++        console.error('Delete appointment occurrence error:', error);
++        res.status(500).json({ success: false, error: 'Internal server error' });
++    }
++});
++
+ // Delete appointment
+ router.delete('/:id', async (req: AuthRequest, res) => {
+     try {
+diff --git a/server/src/routes/categories.ts b/server/src/routes/categories.ts
+index 91adf84..c5ea5ad 100644
+--- a/server/src/routes/categories.ts
++++ b/server/src/routes/categories.ts
+@@ -27,7 +27,7 @@ export const DEFAULT_CATEGORIES: FamilyCategories = {
+     ],
+ };
+ 
+-const MAX_CATEGORIES = 30;
++const MAX_CATEGORIES = 60;
+ const MAX_NAME_LENGTH = 50; // matches the VARCHAR(50) of every category column
+ 
+ // Tables whose `category` column must follow renames/deletions, per module.
+diff --git a/server/src/routes/familyInvites.ts b/server/src/routes/familyInvites.ts
+index 7f6f1e7..3e78e31 100644
+--- a/server/src/routes/familyInvites.ts
++++ b/server/src/routes/familyInvites.ts
+@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
+ import { query, getClient } from '../db';
+ import { authMiddleware, AuthRequest, generateToken } from '../middleware/auth';
+ import { broadcast } from '../lib/broadcaster';
+-import { createNotification } from '../lib/notifications';
++import { createLocalizedNotification } from '../lib/notifications';
+ import { normalizeEmail } from '../lib/normalize';
+ import { isMailEnabled, sendFamilyInviteEmail } from '../lib/mailer';
+ import { resolveAppBaseUrl } from '../lib/appUrl';
+@@ -365,12 +365,24 @@ router.post('/transfer-ownership', async (req: AuthRequest, res) => {
+ 
+     broadcast(newOwnerId, { type: 'update', entity: 'family', action: 'updated' });
+     broadcast(oldOwnerId, { type: 'update', entity: 'family', action: 'updated' });
+-    await createNotification({
++    await createLocalizedNotification({
+         userId: newOwnerId,
+-        title: '👑 Vous êtes propriétaire',
+-        message: 'La propriété de la famille vous a été transférée.',
+         type: 'family_ownership_transferred',
+         url: '/family',
++        texts: {
++            en: {
++                title: '👑 You are the owner',
++                message: 'Family ownership has been transferred to you.',
++            },
++            fr: {
++                title: '👑 Vous êtes propriétaire',
++                message: 'La propriété de la famille vous a été transférée.',
++            },
++            zh: {
++                title: '👑 您现在是家庭所有者',
++                message: '家庭所有权已转移给您。',
++            },
++        },
+     });
+ 
+     return res.json({
+@@ -447,12 +459,24 @@ router.post('/requests', async (req: AuthRequest, res) => {
+     const requester = requesterRes.rows[0] as { name: string; email: string };
+ 
+     broadcast(ownerId, { type: 'update', entity: 'family', action: 'created' });
+-    await createNotification({
++    await createLocalizedNotification({
+         userId: ownerId,
+-        title: '👪 Nouvelle demande d\'accès',
+-        message: `${requester.name} (${requester.email}) souhaite rejoindre votre famille.`,
+         type: 'family_join_request',
+         url: '/family',
++        texts: {
++            en: {
++                title: '👪 New access request',
++                message: `${requester.name} (${requester.email}) wants to join your family.`,
++            },
++            fr: {
++                title: '👪 Nouvelle demande d\'accès',
++                message: `${requester.name} (${requester.email}) souhaite rejoindre votre famille.`,
++            },
++            zh: {
++                title: '👪 新的加入请求',
++                message: `${requester.name} (${requester.email}) 希望加入您的家庭。`,
++            },
++        },
+     });
+ 
+     return res.json(genericResponse);
+@@ -535,12 +559,24 @@ router.post('/requests/:id/approve', async (req: AuthRequest, res) => {
+     // Notify both sides so their UI refreshes
+     broadcast(request.requester_id, { type: 'update', entity: 'family', action: 'updated' });
+     broadcast(req.userId!, { type: 'update', entity: 'family', action: 'updated' });
+-    await createNotification({
++    await createLocalizedNotification({
+         userId: request.requester_id,
+-        title: '✅ Demande acceptée',
+-        message: 'Votre demande d\'accès à la famille a été acceptée.',
+         type: 'family_join_approved',
+         url: '/family',
++        texts: {
++            en: {
++                title: '✅ Request accepted',
++                message: 'Your request to join the family has been accepted.',
++            },
++            fr: {
++                title: '✅ Demande acceptée',
++                message: 'Votre demande d\'accès à la famille a été acceptée.',
++            },
++            zh: {
++                title: '✅ 请求已接受',
++                message: '您的家庭加入请求已被接受。',
++            },
++        },
+     });
+ 
+     return res.json({ success: true });
+@@ -564,12 +600,24 @@ router.post('/requests/:id/reject', async (req: AuthRequest, res) => {
+     await query("UPDATE family_join_requests SET status = 'rejected', responded_at = NOW() WHERE id = $1", [request.id]);
+ 
+     broadcast(request.requester_id, { type: 'update', entity: 'family', action: 'updated' });
+-    await createNotification({
++    await createLocalizedNotification({
+         userId: request.requester_id,
+-        title: 'Demande refusée',
+-        message: 'Votre demande d\'accès à la famille a été refusée.',
+         type: 'family_join_rejected',
+         url: '/family',
++        texts: {
++            en: {
++                title: 'Request declined',
++                message: 'Your request to join the family has been declined.',
++            },
++            fr: {
++                title: 'Demande refusée',
++                message: 'Votre demande d\'accès à la famille a été refusée.',
++            },
++            zh: {
++                title: '请求已拒绝',
++                message: '您的家庭加入请求已被拒绝。',
++            },
++        },
+     });
+ 
+     return res.json({ success: true });
