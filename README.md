@@ -272,3 +272,30 @@ OpenFamily is licensed under the GNU Affero General Public License v3.
 This repository includes the upstream license and attribution information.
 
 See [`ATTRIBUTION.md`](ATTRIBUTION.md) and [`licence.md`](licence.md) for details.
+---
+
+## Package 4 — Family Posts
+
+**New feature addition**
+
+Adds a private shared Family Posts area to OpenFamily for household updates.
+
+Features include:
+
+- personal text posts
+- photo sharing
+- link sharing
+- edit/delete your own posts
+- Seen acknowledgements
+- Seen-by family member names
+- latest Family Post displayed on Today
+- real-time WebSocket updates
+- responsive mobile and desktop layouts
+
+Files:
+
+- [`OpenFamily_Family_Posts_Comparison.md`](OpenFamily_Family_Posts_Comparison.md)
+- [`openfamily-family-posts.patch`](openfamily-family-posts.patch)
+- [`openfamily-family-posts-files.txt`](openfamily-family-posts-files.txt)
+
+

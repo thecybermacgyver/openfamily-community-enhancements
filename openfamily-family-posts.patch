@@ -1,0 +1,1905 @@
+diff --git a/client/src/App.tsx b/client/src/App.tsx
+index 025bda05dee2684fb0e6757f459419105531529e..36a0fb18e0aac540e4d4b167a1c7eef8f49206cc 100644
+--- a/client/src/App.tsx
++++ b/client/src/App.tsx
+@@ -10,6 +10,7 @@ import ResetPassword from './pages/ResetPassword';
+ import Kiosk from './pages/Kiosk';
+ import ServerSetup from './pages/ServerSetup';
+ import Dashboard from './pages/Dashboard';
++import Posts from './pages/Posts';
+ import ShoppingList from './pages/ShoppingList';
+ import Tasks from './pages/Tasks';
+ import Rewards from './pages/Rewards';
+@@ -72,6 +73,7 @@ function App() {
+                 <Route path="/" element={<Dashboard />} />
+                 <Route path="/shopping" element={<ShoppingList />} />
+                 <Route path="/tasks" element={<Tasks />} />
++                <Route path="/posts" element={<Posts />} />
+                 <Route path="/rewards" element={moduleRoute('rewards', <Rewards />)} />
+                 <Route path="/calendar" element={<Calendar />} />
+                 <Route path="/planning" element={moduleRoute('planning', <Planning />)} />
+diff --git a/client/src/components/layout/Layout.tsx b/client/src/components/layout/Layout.tsx
+index 511aeae3a9ea1552177db3712c9c53aeddf39d70..6a5e1bd05bd452fcf0293084c720bcf4a6af4773 100644
+--- a/client/src/components/layout/Layout.tsx
++++ b/client/src/components/layout/Layout.tsx
+@@ -23,6 +23,7 @@ import {
+     WifiOff,
+     Plug,
+     PiggyBank,
++    MessageSquare,
+ } from 'lucide-react';
+ import { cn } from '../../lib/utils';
+ import { Button } from '../ui/Button';
+@@ -40,6 +41,7 @@ const navigation: { labelKey: string; href: string; icon: typeof Home; module?:
+     { labelKey: 'items.today', href: '/', icon: Home },
+     { labelKey: 'items.shopping', href: '/shopping', icon: ShoppingCart },
+     { labelKey: 'items.tasks', href: '/tasks', icon: CheckSquare },
++    { labelKey: 'items.posts', href: '/posts', icon: MessageSquare },
+     { labelKey: 'items.rewards', href: '/rewards', icon: PiggyBank, module: 'rewards' },
+     { labelKey: 'items.calendar', href: '/calendar', icon: CalendarIcon },
+     { labelKey: 'items.planning', href: '/planning', icon: CalendarDays, module: 'planning' },
+@@ -62,6 +64,7 @@ const mobileTabs: { labelKey: string; href: string; icon: typeof Home; module?:
+ const quickActions: { labelKey: string; href: string; icon: typeof Home; module?: string }[] = [
+     { labelKey: 'quickActions.addShopping', href: '/shopping', icon: ShoppingCart },
+     { labelKey: 'quickActions.addTask', href: '/tasks', icon: CheckSquare },
++    { labelKey: 'quickActions.addPost', href: '/posts', icon: MessageSquare },
+     { labelKey: 'quickActions.addAppointment', href: '/calendar', icon: CalendarIcon },
+     { labelKey: 'quickActions.addSchedule', href: '/planning', icon: CalendarDays, module: 'planning' },
+     { labelKey: 'quickActions.addRecipe', href: '/recipes', icon: ChefHat, module: 'recipes' },
+diff --git a/client/src/contexts/WebSocketContext.tsx b/client/src/contexts/WebSocketContext.tsx
+index 95e9588c91a481f8c5ba42c9c3c43b118484be37..8878f32f20ccea13fcb148f2d1055b33fd1621f6 100644
+--- a/client/src/contexts/WebSocketContext.tsx
++++ b/client/src/contexts/WebSocketContext.tsx
+@@ -24,7 +24,8 @@ export type WsEntity =
+     | 'notifications'
+     | 'integrations'
+     | 'rewards'
+-    | 'notes';
++    | 'notes'
++    | 'posts';
+ 
+ export type WsAction = 'created' | 'updated' | 'deleted';
+ 
+diff --git a/client/src/i18n/locales/en/dashboard.json b/client/src/i18n/locales/en/dashboard.json
+index cb61f9f900305ab2e5d50b943e45f42fd96a59c9..1f9c05a651d7d1755aa8dd96ac3e82e25370a204 100644
+--- a/client/src/i18n/locales/en/dashboard.json
++++ b/client/src/i18n/locales/en/dashboard.json
+@@ -61,5 +61,13 @@
+       "quick": "Quick access (shopping, budget, tasks)",
+       "notes": "Family notes"
+     }
++  },
++  "latestPost": {
++    "title": "Latest family post",
++    "viewAll": "View all posts",
++    "seenBy": "Seen by: {{names}}",
++    "notSeen": "Not seen by anyone yet",
++    "seen": "Seen",
++    "markSeen": "Mark seen"
+   }
+ }
+diff --git a/client/src/i18n/locales/en/nav.json b/client/src/i18n/locales/en/nav.json
+index e5394870f6d138f3a500876398881f6d6e4aed1a..bd05e68fd71d31d1015e1dc84b4d88af9f0651e5 100644
+--- a/client/src/i18n/locales/en/nav.json
++++ b/client/src/i18n/locales/en/nav.json
+@@ -11,7 +11,8 @@
+     "budget": "Budget",
+     "family": "Family",
+     "integrations": "Integrations",
+-    "settings": "Settings"
++    "settings": "Settings",
++    "posts": "Posts"
+   },
+   "mobile": {
+     "home": "Home",
+@@ -29,7 +30,8 @@
+     "addRecipe": "Add a recipe",
+     "addMeal": "Add a meal",
+     "addExpense": "Add an expense",
+-    "addMember": "Add a member"
++    "addMember": "Add a member",
++    "addPost": "New post"
+   },
+   "user": {
+     "profile": "Profile",
+@@ -38,5 +40,40 @@
+     "openMenu": "Open menu"
+   },
+   "offline": "Offline mode. The data shown comes from the cache. Changes will be possible again once the connection is back.",
+-  "pageTitleFallback": "Dashboard"
++  "pageTitleFallback": "Dashboard",
++  "posts": {
++    "title": "Family Posts",
++    "subtitle": "Share what is on your mind, a photo, or a link with your family.",
++    "newPost": "New post",
++    "editPost": "Edit post",
++    "editing": "You are editing one of your posts.",
++    "placeholder": "What's on your mind?",
++    "linkPlaceholder": "Share a link (optional)",
++    "addPhoto": "Add photo",
++    "post": "Post",
++    "saveChanges": "Save changes",
++    "cancel": "Cancel",
++    "photoPreview": "Photo preview",
++    "removePhoto": "Remove photo",
++    "sharedPhoto": "Shared photo",
++    "empty": "No family posts yet.",
++    "emptySubtitle": "Be the first to share something.",
++    "edited": "edited",
++    "edit": "Edit post",
++    "delete": "Delete post",
++    "confirmDelete": "Delete this post?",
++    "seen": "Seen",
++    "markSeen": "Mark seen",
++    "seenBy": "Seen by: {{names}}",
++    "notSeen": "Not seen by anyone yet",
++    "errors": {
++      "load": "Could not load posts.",
++      "save": "Could not save the post.",
++      "delete": "Could not delete the post.",
++      "seen": "Could not mark the post as seen.",
++      "empty": "Add some text, a photo, or a link first.",
++      "image": "That photo could not be used.",
++      "imageTooLarge": "That photo is still too large after resizing."
++    }
++  }
+ }
+diff --git a/client/src/i18n/locales/fr/dashboard.json b/client/src/i18n/locales/fr/dashboard.json
+index 146f22c6b7d29565f56c29ee7cad1807db2eb263..b4013fcdd5c90d0ca692c055d440f5ab6cf65101 100644
+--- a/client/src/i18n/locales/fr/dashboard.json
++++ b/client/src/i18n/locales/fr/dashboard.json
+@@ -61,5 +61,13 @@
+       "quick": "Accès rapides (courses, budget, tâches)",
+       "notes": "Mots de la famille"
+     }
++  },
++  "latestPost": {
++    "title": "Dernière publication familiale",
++    "viewAll": "Voir les publications",
++    "seenBy": "Vu par : {{names}}",
++    "notSeen": "Pas encore vu",
++    "seen": "Vu",
++    "markSeen": "Marquer comme vu"
+   }
+ }
+diff --git a/client/src/i18n/locales/fr/nav.json b/client/src/i18n/locales/fr/nav.json
+index 4a60516f5f485c468a296e38fdbefc659b13acf6..9646e8d7436fc651e3d809894958af2c8f66481e 100644
+--- a/client/src/i18n/locales/fr/nav.json
++++ b/client/src/i18n/locales/fr/nav.json
+@@ -11,7 +11,8 @@
+     "budget": "Budget",
+     "family": "Famille",
+     "integrations": "Intégrations",
+-    "settings": "Paramètres"
++    "settings": "Paramètres",
++    "posts": "Publications"
+   },
+   "mobile": {
+     "home": "Accueil",
+@@ -29,7 +30,8 @@
+     "addRecipe": "Ajouter une recette",
+     "addMeal": "Ajouter un repas",
+     "addExpense": "Ajouter une dépense",
+-    "addMember": "Ajouter un membre"
++    "addMember": "Ajouter un membre",
++    "addPost": "Nouvelle publication"
+   },
+   "user": {
+     "profile": "Profil",
+@@ -38,5 +40,40 @@
+     "openMenu": "Ouvrir le menu"
+   },
+   "offline": "Mode hors ligne. Les données affichées proviennent du cache. Les modifications seront possibles au retour de la connexion.",
+-  "pageTitleFallback": "Tableau de bord"
++  "pageTitleFallback": "Tableau de bord",
++  "posts": {
++    "title": "Publications familiales",
++    "subtitle": "Partagez une pensée, une photo ou un lien avec votre famille.",
++    "newPost": "Nouvelle publication",
++    "editPost": "Modifier la publication",
++    "editing": "Vous modifiez l'une de vos publications.",
++    "placeholder": "À quoi pensez-vous ?",
++    "linkPlaceholder": "Partager un lien (facultatif)",
++    "addPhoto": "Ajouter une photo",
++    "post": "Publier",
++    "saveChanges": "Enregistrer",
++    "cancel": "Annuler",
++    "photoPreview": "Aperçu de la photo",
++    "removePhoto": "Retirer la photo",
++    "sharedPhoto": "Photo partagée",
++    "empty": "Aucune publication familiale.",
++    "emptySubtitle": "Soyez le premier à partager quelque chose.",
++    "edited": "modifié",
++    "edit": "Modifier",
++    "delete": "Supprimer",
++    "confirmDelete": "Supprimer cette publication ?",
++    "seen": "Vu",
++    "markSeen": "Marquer comme vu",
++    "seenBy": "Vu par : {{names}}",
++    "notSeen": "Pas encore vu",
++    "errors": {
++      "load": "Impossible de charger les publications.",
++      "save": "Impossible d'enregistrer la publication.",
++      "delete": "Impossible de supprimer la publication.",
++      "seen": "Impossible de marquer la publication comme vue.",
++      "empty": "Ajoutez du texte, une photo ou un lien.",
++      "image": "Cette photo ne peut pas être utilisée.",
++      "imageTooLarge": "Cette photo est encore trop volumineuse après redimensionnement."
++    }
++  }
+ }
+diff --git a/client/src/i18n/locales/pt/dashboard.json b/client/src/i18n/locales/pt/dashboard.json
+index 59bb500e4b4418cdfef37ba1be6cdcdce1449e03..da79ddece1787f079ccf22f2ccd6b79cd582e3a6 100644
+--- a/client/src/i18n/locales/pt/dashboard.json
++++ b/client/src/i18n/locales/pt/dashboard.json
+@@ -61,5 +61,13 @@
+       "quick": "Acesso rápido (compras, orçamento, tarefas)",
+       "notes": "Recados da família"
+     }
++  },
++  "latestPost": {
++    "title": "Publicação mais recente",
++    "viewAll": "Ver publicações",
++    "seenBy": "Visto por: {{names}}",
++    "notSeen": "Ainda não foi visto",
++    "seen": "Visto",
++    "markSeen": "Marcar como visto"
+   }
+ }
+diff --git a/client/src/i18n/locales/pt/nav.json b/client/src/i18n/locales/pt/nav.json
+index 83d8cc53f2876ba1ab0c0a798cb50dcc25b283c8..47f8881670ba6e764609ff0324131656ce5eabc1 100644
+--- a/client/src/i18n/locales/pt/nav.json
++++ b/client/src/i18n/locales/pt/nav.json
+@@ -11,7 +11,8 @@
+     "budget": "Orçamento",
+     "family": "Família",
+     "integrations": "Integrações",
+-    "settings": "Configurações"
++    "settings": "Configurações",
++    "posts": "Publicações"
+   },
+   "mobile": {
+     "home": "Início",
+@@ -29,7 +30,8 @@
+     "addRecipe": "Adicionar receita",
+     "addMeal": "Adicionar refeição",
+     "addExpense": "Adicionar despesa",
+-    "addMember": "Adicionar membro"
++    "addMember": "Adicionar membro",
++    "addPost": "Nova publicação"
+   },
+   "user": {
+     "profile": "Perfil",
+@@ -38,5 +40,40 @@
+     "openMenu": "Abrir menu"
+   },
+   "offline": "Modo offline. Os dados exibidos vêm do cache local. As alterações serão salvas assim que a conexão retornar.",
+-  "pageTitleFallback": "Painel Principal"
++  "pageTitleFallback": "Painel Principal",
++  "posts": {
++    "title": "Publicações da família",
++    "subtitle": "Partilhe uma ideia, foto ou ligação com a sua família.",
++    "newPost": "Nova publicação",
++    "editPost": "Editar publicação",
++    "editing": "Está a editar uma das suas publicações.",
++    "placeholder": "Em que está a pensar?",
++    "linkPlaceholder": "Partilhar uma ligação (opcional)",
++    "addPhoto": "Adicionar foto",
++    "post": "Publicar",
++    "saveChanges": "Guardar alterações",
++    "cancel": "Cancelar",
++    "photoPreview": "Pré-visualização da foto",
++    "removePhoto": "Remover foto",
++    "sharedPhoto": "Foto partilhada",
++    "empty": "Ainda não existem publicações.",
++    "emptySubtitle": "Seja o primeiro a partilhar algo.",
++    "edited": "editado",
++    "edit": "Editar",
++    "delete": "Eliminar",
++    "confirmDelete": "Eliminar esta publicação?",
++    "seen": "Visto",
++    "markSeen": "Marcar como visto",
++    "seenBy": "Visto por: {{names}}",
++    "notSeen": "Ainda não foi visto",
++    "errors": {
++      "load": "Não foi possível carregar as publicações.",
++      "save": "Não foi possível guardar a publicação.",
++      "delete": "Não foi possível eliminar a publicação.",
++      "seen": "Não foi possível marcar a publicação como vista.",
++      "empty": "Adicione texto, uma foto ou uma ligação.",
++      "image": "Não foi possível utilizar essa foto.",
++      "imageTooLarge": "A foto continua demasiado grande depois de redimensionada."
++    }
++  }
+ }
+diff --git a/client/src/i18n/locales/zh/dashboard.json b/client/src/i18n/locales/zh/dashboard.json
+index 6a888e4d895586c2544c170f7b4074c43a18bfea..1116a45dc27304e0c1b277f1e3c7acd01889b730 100644
+--- a/client/src/i18n/locales/zh/dashboard.json
++++ b/client/src/i18n/locales/zh/dashboard.json
+@@ -61,5 +61,13 @@
+       "quick": "快捷入口（购物、预算、任务）",
+       "notes": "家庭留言"
+     }
++  },
++  "latestPost": {
++    "title": "最新家庭动态",
++    "viewAll": "查看所有动态",
++    "seenBy": "已查看：{{names}}",
++    "notSeen": "尚无人查看",
++    "seen": "已查看",
++    "markSeen": "标记为已查看"
+   }
+ }
+diff --git a/client/src/i18n/locales/zh/nav.json b/client/src/i18n/locales/zh/nav.json
+index 011204cc6a43ef72a7eb36c34550cc83ef0ff4f0..223cafd6208c9d219705b10029b8230b0026f351 100644
+--- a/client/src/i18n/locales/zh/nav.json
++++ b/client/src/i18n/locales/zh/nav.json
+@@ -11,7 +11,8 @@
+     "budget": "预算",
+     "family": "家庭",
+     "integrations": "集成",
+-    "settings": "设置"
++    "settings": "设置",
++    "posts": "家庭动态"
+   },
+   "mobile": {
+     "home": "首页",
+@@ -29,7 +30,8 @@
+     "addRecipe": "添加食谱",
+     "addMeal": "添加餐食",
+     "addExpense": "添加支出",
+-    "addMember": "添加成员"
++    "addMember": "添加成员",
++    "addPost": "新动态"
+   },
+   "user": {
+     "profile": "个人资料",
+@@ -38,5 +40,40 @@
+     "openMenu": "打开菜单"
+   },
+   "offline": "当前处于离线模式，显示的数据来自缓存。恢复连接后即可继续更改。",
+-  "pageTitleFallback": "首页"
++  "pageTitleFallback": "首页",
++  "posts": {
++    "title": "家庭动态",
++    "subtitle": "与家人分享想法、照片或链接。",
++    "newPost": "新动态",
++    "editPost": "编辑动态",
++    "editing": "您正在编辑自己的动态。",
++    "placeholder": "有什么想分享的？",
++    "linkPlaceholder": "分享链接（可选）",
++    "addPhoto": "添加照片",
++    "post": "发布",
++    "saveChanges": "保存更改",
++    "cancel": "取消",
++    "photoPreview": "照片预览",
++    "removePhoto": "移除照片",
++    "sharedPhoto": "分享的照片",
++    "empty": "还没有家庭动态。",
++    "emptySubtitle": "成为第一个分享内容的人。",
++    "edited": "已编辑",
++    "edit": "编辑",
++    "delete": "删除",
++    "confirmDelete": "删除这条动态？",
++    "seen": "已查看",
++    "markSeen": "标记为已查看",
++    "seenBy": "已查看：{{names}}",
++    "notSeen": "尚无人查看",
++    "errors": {
++      "load": "无法加载动态。",
++      "save": "无法保存动态。",
++      "delete": "无法删除动态。",
++      "seen": "无法标记为已查看。",
++      "empty": "请先添加文字、照片或链接。",
++      "image": "无法使用这张照片。",
++      "imageTooLarge": "调整大小后照片仍然过大。"
++    }
++  }
+ }
+diff --git a/client/src/pages/Dashboard.tsx b/client/src/pages/Dashboard.tsx
+index 3d2ee27e25669d59819170fdb64569da74949e2a..1a4ca4ea678155d45026a87aa347116bf2755571 100644
+--- a/client/src/pages/Dashboard.tsx
++++ b/client/src/pages/Dashboard.tsx
+@@ -44,6 +44,22 @@ interface PlanningEntry {
+     location?: string;
+ }
+ 
++interface LatestFamilyPost {
++    id: string;
++    author_name: string;
++    author_avatar?: string | null;
++    content?: string | null;
++    image_url?: string | null;
++    link_url?: string | null;
++    created_at: string;
++    seen_by: Array<{
++        id: string;
++        name: string;
++        seen_at: string;
++    }>;
++    is_seen: boolean;
++}
++
+ const Dashboard: React.FC = () => {
+     const { t } = useTranslation(['dashboard', 'common', 'notes']);
+     const { user, isModuleEnabled, dashboardPrefs, updateDashboardPrefs } = useAuth();
+@@ -52,6 +68,7 @@ const Dashboard: React.FC = () => {
+     const [appointments, setAppointments] = useState<Appointment[]>([]);
+     const [planning, setPlanning] = useState<PlanningEntry[]>([]);
+     const [notes, setNotes] = useState<FamilyNote[]>([]);
++    const [latestPost, setLatestPost] = useState<LatestFamilyPost | null>(null);
+     const [loading, setLoading] = useState(true);
+     const [customizing, setCustomizing] = useState(false);
+     const navigate = useNavigate();
+@@ -73,6 +90,22 @@ const Dashboard: React.FC = () => {
+     useWebSocketUpdates('budget', () => { void loadAll(); });
+     useWebSocketUpdates('planning', () => { void loadPlanning(); });
+     useWebSocketUpdates('notes', () => { void loadNotes(); });
++    useWebSocketUpdates('posts', () => { void loadLatestPost(); });
++
++    const loadLatestPost = async () => {
++        try {
++            const res = await api.get<{
++                success: boolean;
++                data: LatestFamilyPost | null;
++            }>('/api/posts/latest');
++
++            if (res.success) {
++                setLatestPost(res.data);
++            }
++        } catch (e) {
++            console.error('Latest post load error:', e);
++        }
++    };
+ 
+     const loadNotes = async () => {
+         try {
+@@ -98,6 +131,7 @@ const Dashboard: React.FC = () => {
+     const loadAll = async () => {
+         try {
+             void loadNotes();
++            void loadLatestPost();
+             void loadPlanning();
+             const [statsRes, apptRes] = await Promise.all([
+                 api.get<{ success: boolean; data: DashboardStats }>('/api/dashboard'),
+@@ -412,10 +446,162 @@ const Dashboard: React.FC = () => {
+         );
+     };
+ 
++    const markLatestPostSeen = async () => {
++        if (!latestPost || latestPost.is_seen) return;
++
++        try {
++            await api.post(
++                `/api/posts/${latestPost.id}/seen`,
++                {}
++            );
++            void loadLatestPost();
++        } catch (e) {
++            console.error(
++                'Mark latest post seen error:',
++                e
++            );
++        }
++    };
++
+     const renderNotes = () => (
+-        <section key="notes">
+-            <h2 className="font-serif text-h2 mb-4">{t('notes:title')}</h2>
+-            <FamilyNotes notes={notes} onChanged={() => void loadNotes()} />
++        <section key="notes" className="space-y-6">
++            {latestPost && (
++                <div
++                    className={`rounded-card border p-5 ${
++                        latestPost.is_seen
++                            ? 'border-border bg-card'
++                            : 'border-primary/30 bg-primary-soft/10'
++                    }`}
++                >
++                    <div className="mb-3 flex items-center justify-between gap-3">
++                        <h2 className="font-serif text-h2">
++                            {t('dashboard:latestPost.title')}
++                        </h2>
++
++                        <button
++                            type="button"
++                            onClick={() => navigate('/posts')}
++                            className="text-caption font-medium text-primary hover:underline"
++                        >
++                            {t('dashboard:latestPost.viewAll')}
++                        </button>
++                    </div>
++
++                    <div className="flex items-start gap-3">
++                        {latestPost.author_avatar ? (
++                            <img
++                                src={latestPost.author_avatar}
++                                alt={latestPost.author_name}
++                                className="h-9 w-9 shrink-0 rounded-full object-cover"
++                            />
++                        ) : (
++                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-caption font-semibold text-primary">
++                                {latestPost.author_name.charAt(0) || '?'}
++                            </div>
++                        )}
++
++                        <div className="min-w-0 flex-1">
++                            <p className="text-caption font-semibold text-foreground">
++                                {latestPost.author_name}
++                            </p>
++
++                            <p className="text-micro text-muted-foreground">
++                                {new Intl.DateTimeFormat(
++                                    undefined,
++                                    {
++                                        dateStyle: 'medium',
++                                        timeStyle: 'short',
++                                    }
++                                ).format(
++                                    new Date(
++                                        latestPost.created_at
++                                    )
++                                )}
++                            </p>
++
++                            {latestPost.content && (
++                                <p className="mt-3 whitespace-pre-wrap break-words text-body">
++                                    {latestPost.content}
++                                </p>
++                            )}
++
++                            {latestPost.image_url && (
++                                <img
++                                    src={latestPost.image_url}
++                                    alt=""
++                                    className="mt-3 max-h-64 w-full rounded-card border border-border bg-surface-2 object-contain"
++                                />
++                            )}
++
++                            {latestPost.link_url && (
++                                <a
++                                    href={latestPost.link_url}
++                                    target="_blank"
++                                    rel="noreferrer"
++                                    className="mt-3 block truncate text-caption text-primary hover:underline"
++                                >
++                                    {latestPost.link_url}
++                                </a>
++                            )}
++
++                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
++                                <p className="text-micro text-muted-foreground">
++                                    {latestPost.seen_by.length
++                                        ? t(
++                                              'dashboard:latestPost.seenBy',
++                                              {
++                                                  names: latestPost.seen_by
++                                                      .map(
++                                                          (
++                                                              person
++                                                          ) =>
++                                                              person.name
++                                                      )
++                                                      .join(', '),
++                                              }
++                                          )
++                                        : t(
++                                              'dashboard:latestPost.notSeen'
++                                          )}
++                                </p>
++
++                                <button
++                                    type="button"
++                                    disabled={
++                                        latestPost.is_seen
++                                    }
++                                    onClick={() =>
++                                        void markLatestPostSeen()
++                                    }
++                                    className={`rounded-input px-3 py-1.5 text-caption font-medium ${
++                                        latestPost.is_seen
++                                            ? 'text-success'
++                                            : 'bg-primary-soft text-primary'
++                                    }`}
++                                >
++                                    {latestPost.is_seen
++                                        ? t(
++                                              'dashboard:latestPost.seen'
++                                          )
++                                        : t(
++                                              'dashboard:latestPost.markSeen'
++                                          )}
++                                </button>
++                            </div>
++                        </div>
++                    </div>
++                </div>
++            )}
++
++            <div>
++                <h2 className="font-serif text-h2 mb-4">
++                    {t('notes:title')}
++                </h2>
++                <FamilyNotes
++                    notes={notes}
++                    onChanged={() => void loadNotes()}
++                />
++            </div>
+         </section>
+     );
+ 
+diff --git a/client/src/pages/Posts.tsx b/client/src/pages/Posts.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..3869c484f17434fac6b6301bd06cc825a7be655e
+--- /dev/null
++++ b/client/src/pages/Posts.tsx
+@@ -0,0 +1,630 @@
++import React, { useCallback, useEffect, useRef, useState } from 'react';
++import {
++    Check,
++    CheckCheck,
++    Edit2,
++    ExternalLink,
++    ImagePlus,
++    MessageSquare,
++    Send,
++    Trash2,
++    X,
++} from 'lucide-react';
++import { useTranslation } from 'react-i18next';
++import { api } from '../lib/api';
++import { useWebSocketUpdates } from '../hooks/useWebSocketUpdates';
++
++interface SeenPerson {
++    id: string;
++    name: string;
++    seen_at: string;
++}
++
++interface FamilyPost {
++    id: string;
++    author_user_id: string;
++    author_name: string;
++    author_avatar?: string | null;
++    content?: string | null;
++    image_url?: string | null;
++    link_url?: string | null;
++    created_at: string;
++    updated_at: string;
++    seen_by: SeenPerson[];
++    is_seen: boolean;
++    is_own: boolean;
++}
++
++const MAX_DATA_URL = 1_500_000;
++
++const normalizeLink = (value: string): string => {
++    const clean = value.trim();
++
++    if (!clean) return '';
++
++    return /^https?:\/\//i.test(clean)
++        ? clean
++        : `https://${clean}`;
++};
++
++const prepareImage = (file: File): Promise<string> =>
++    new Promise((resolve, reject) => {
++        if (!file.type.startsWith('image/')) {
++            reject(new Error('INVALID_IMAGE'));
++            return;
++        }
++
++        const reader = new FileReader();
++
++        reader.onerror = () => reject(new Error('READ_ERROR'));
++
++        reader.onload = () => {
++            const image = new Image();
++
++            image.onerror = () =>
++                reject(new Error('INVALID_IMAGE'));
++
++            image.onload = () => {
++                const maxSide = 1280;
++                const scale = Math.min(
++                    1,
++                    maxSide / Math.max(image.width, image.height)
++                );
++
++                const canvas = document.createElement('canvas');
++                canvas.width = Math.max(
++                    1,
++                    Math.round(image.width * scale)
++                );
++                canvas.height = Math.max(
++                    1,
++                    Math.round(image.height * scale)
++                );
++
++                const ctx = canvas.getContext('2d');
++
++                if (!ctx) {
++                    reject(new Error('IMAGE_ERROR'));
++                    return;
++                }
++
++                ctx.drawImage(
++                    image,
++                    0,
++                    0,
++                    canvas.width,
++                    canvas.height
++                );
++
++                const dataUrl = canvas.toDataURL(
++                    'image/jpeg',
++                    0.76
++                );
++
++                if (dataUrl.length > MAX_DATA_URL) {
++                    reject(new Error('IMAGE_TOO_LARGE'));
++                    return;
++                }
++
++                resolve(dataUrl);
++            };
++
++            image.src = String(reader.result);
++        };
++
++        reader.readAsDataURL(file);
++    });
++
++const Posts: React.FC = () => {
++    const { t } = useTranslation('nav');
++
++    const [posts, setPosts] = useState<FamilyPost[]>([]);
++    const [loading, setLoading] = useState(true);
++    const [saving, setSaving] = useState(false);
++    const [error, setError] = useState('');
++
++    const [content, setContent] = useState('');
++    const [imageUrl, setImageUrl] = useState('');
++    const [linkUrl, setLinkUrl] = useState('');
++    const [editingId, setEditingId] =
++        useState<string | null>(null);
++
++    const fileInput = useRef<HTMLInputElement>(null);
++    const composerRef = useRef<HTMLDivElement>(null);
++
++    const loadPosts = useCallback(async () => {
++        try {
++            const response = await api.get<{
++                success: boolean;
++                data: FamilyPost[];
++            }>('/api/posts');
++
++            if (response.success) {
++                setPosts(response.data);
++            }
++        } catch (err) {
++            setError(
++                err instanceof Error
++                    ? err.message
++                    : t('posts.errors.load')
++            );
++        } finally {
++            setLoading(false);
++        }
++    }, [t]);
++
++    useEffect(() => {
++        void loadPosts();
++    }, [loadPosts]);
++
++    useWebSocketUpdates('posts', () => {
++        void loadPosts();
++    });
++
++    const resetComposer = () => {
++        setContent('');
++        setImageUrl('');
++        setLinkUrl('');
++        setEditingId(null);
++        setError('');
++
++        if (fileInput.current) {
++            fileInput.current.value = '';
++        }
++    };
++
++    const choosePhoto = async (file?: File) => {
++        if (!file) return;
++
++        setError('');
++
++        try {
++            setImageUrl(await prepareImage(file));
++        } catch (err) {
++            setError(
++                err instanceof Error &&
++                    err.message === 'IMAGE_TOO_LARGE'
++                    ? t('posts.errors.imageTooLarge')
++                    : t('posts.errors.image')
++            );
++        }
++    };
++
++    const save = async () => {
++        const payload = {
++            content: content.trim() || null,
++            image_url: imageUrl || null,
++            link_url: normalizeLink(linkUrl) || null,
++        };
++
++        if (
++            !payload.content &&
++            !payload.image_url &&
++            !payload.link_url
++        ) {
++            setError(t('posts.errors.empty'));
++            return;
++        }
++
++        setSaving(true);
++        setError('');
++
++        try {
++            if (editingId) {
++                await api.put(
++                    `/api/posts/${editingId}`,
++                    payload
++                );
++            } else {
++                await api.post('/api/posts', payload);
++            }
++
++            resetComposer();
++            await loadPosts();
++        } catch (err) {
++            setError(
++                err instanceof Error
++                    ? err.message
++                    : t('posts.errors.save')
++            );
++        } finally {
++            setSaving(false);
++        }
++    };
++
++    const edit = (post: FamilyPost) => {
++        setEditingId(post.id);
++        setContent(post.content || '');
++        setImageUrl(post.image_url || '');
++        setLinkUrl(post.link_url || '');
++        setError('');
++
++        window.setTimeout(() => {
++            composerRef.current?.scrollIntoView({
++                behavior: 'smooth',
++                block: 'start',
++            });
++        }, 0);
++    };
++
++    const remove = async (post: FamilyPost) => {
++        if (!window.confirm(t('posts.confirmDelete'))) {
++            return;
++        }
++
++        try {
++            await api.delete(`/api/posts/${post.id}`);
++
++            if (editingId === post.id) {
++                resetComposer();
++            }
++
++            await loadPosts();
++        } catch (err) {
++            setError(
++                err instanceof Error
++                    ? err.message
++                    : t('posts.errors.delete')
++            );
++        }
++    };
++
++    const markSeen = async (post: FamilyPost) => {
++        if (post.is_seen) return;
++
++        try {
++            await api.post(`/api/posts/${post.id}/seen`, {});
++            await loadPosts();
++        } catch (err) {
++            setError(
++                err instanceof Error
++                    ? err.message
++                    : t('posts.errors.seen')
++            );
++        }
++    };
++
++    const formatWhen = (value: string) =>
++        new Intl.DateTimeFormat(undefined, {
++            dateStyle: 'medium',
++            timeStyle: 'short',
++        }).format(new Date(value));
++
++    if (loading) {
++        return (
++            <div className="flex min-h-[40vh] items-center justify-center">
++                <div className="spinner-brand" />
++            </div>
++        );
++    }
++
++    return (
++        <div className="space-y-6">
++            <div>
++                <h1 className="font-serif text-h1">
++                    {t('posts.title')}
++                </h1>
++                <p className="mt-1 text-body text-muted-foreground">
++                    {t('posts.subtitle')}
++                </p>
++            </div>
++
++            <div
++                ref={composerRef}
++                className="rounded-card border border-border bg-card p-5 shadow-sm sm:p-6"
++            >
++                <div className="mb-4 flex items-center gap-3">
++                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-soft text-primary">
++                        <MessageSquare className="h-5 w-5" />
++                    </div>
++
++                    <div>
++                        <h2 className="font-semibold text-foreground">
++                            {editingId
++                                ? t('posts.editPost')
++                                : t('posts.newPost')}
++                        </h2>
++
++                        {editingId && (
++                            <p className="text-micro text-muted-foreground">
++                                {t('posts.editing')}
++                            </p>
++                        )}
++                    </div>
++                </div>
++
++                <textarea
++                    value={content}
++                    onChange={(e) =>
++                        setContent(e.target.value)
++                    }
++                    maxLength={5000}
++                    rows={4}
++                    placeholder={t('posts.placeholder')}
++                    className="input-nexus min-h-[110px] resize-y"
++                />
++
++                {imageUrl && (
++                    <div className="relative mt-4 overflow-hidden rounded-card border border-border">
++                        <img
++                            src={imageUrl}
++                            alt={t('posts.photoPreview')}
++                            className="max-h-[420px] w-full bg-surface-2 object-contain"
++                        />
++
++                        <button
++                            type="button"
++                            onClick={() => setImageUrl('')}
++                            className="absolute right-2 top-2 rounded-full bg-background/90 p-2 shadow"
++                            aria-label={t(
++                                'posts.removePhoto'
++                            )}
++                        >
++                            <X className="h-4 w-4" />
++                        </button>
++                    </div>
++                )}
++
++                <input
++                    value={linkUrl}
++                    onChange={(e) =>
++                        setLinkUrl(e.target.value)
++                    }
++                    placeholder={t(
++                        'posts.linkPlaceholder'
++                    )}
++                    className="input-nexus mt-4"
++                />
++
++                {error && (
++                    <p className="mt-3 text-caption text-danger">
++                        {error}
++                    </p>
++                )}
++
++                <input
++                    ref={fileInput}
++                    type="file"
++                    accept="image/*"
++                    className="hidden"
++                    onChange={(e) => {
++                        void choosePhoto(
++                            e.target.files?.[0]
++                        );
++                    }}
++                />
++
++                <div className="mt-4 flex flex-wrap items-center gap-2">
++                    <button
++                        type="button"
++                        disabled={saving}
++                        onClick={() =>
++                            fileInput.current?.click()
++                        }
++                        className="inline-flex min-h-[40px] items-center rounded-input border border-border bg-surface-2 px-4 text-caption font-medium hover:bg-surface-3 disabled:opacity-50"
++                    >
++                        <ImagePlus className="mr-2 h-4 w-4" />
++                        {t('posts.addPhoto')}
++                    </button>
++
++                    <div className="flex-1" />
++
++                    {editingId && (
++                        <button
++                            type="button"
++                            disabled={saving}
++                            onClick={resetComposer}
++                            className="min-h-[40px] rounded-input px-4 text-caption font-medium text-muted-foreground hover:bg-surface-2"
++                        >
++                            {t('posts.cancel')}
++                        </button>
++                    )}
++
++                    <button
++                        type="button"
++                        disabled={
++                            saving ||
++                            (!content.trim() &&
++                                !imageUrl &&
++                                !linkUrl.trim())
++                        }
++                        onClick={() => void save()}
++                        className="inline-flex min-h-[40px] items-center rounded-input bg-primary px-4 text-caption font-semibold text-primary-foreground disabled:opacity-50"
++                    >
++                        <Send className="mr-2 h-4 w-4" />
++                        {editingId
++                            ? t('posts.saveChanges')
++                            : t('posts.post')}
++                    </button>
++                </div>
++            </div>
++
++            {posts.length === 0 ? (
++                <div className="rounded-card border border-dashed border-border p-10 text-center">
++                    <MessageSquare className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
++                    <p className="font-medium text-muted-foreground">
++                        {t('posts.empty')}
++                    </p>
++                    <p className="mt-1 text-caption text-muted-foreground">
++                        {t('posts.emptySubtitle')}
++                    </p>
++                </div>
++            ) : (
++                <div className="space-y-4">
++                    {posts.map((post) => (
++                        <article
++                            key={post.id}
++                            className={`rounded-card border p-5 shadow-sm sm:p-6 ${
++                                post.is_seen
++                                    ? 'border-border bg-card'
++                                    : 'border-primary/30 bg-primary-soft/10'
++                            }`}
++                        >
++                            <div className="flex items-start gap-3">
++                                {post.author_avatar ? (
++                                    <img
++                                        src={
++                                            post.author_avatar
++                                        }
++                                        alt={post.author_name}
++                                        className="h-10 w-10 shrink-0 rounded-full object-cover"
++                                    />
++                                ) : (
++                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft font-semibold text-primary">
++                                        {post.author_name.charAt(
++                                            0
++                                        ) || '?'}
++                                    </div>
++                                )}
++
++                                <div className="min-w-0 flex-1">
++                                    <div className="flex flex-wrap items-start justify-between gap-2">
++                                        <div>
++                                            <p className="font-semibold text-foreground">
++                                                {
++                                                    post.author_name
++                                                }
++                                            </p>
++
++                                            <p className="text-micro text-muted-foreground">
++                                                {formatWhen(
++                                                    post.created_at
++                                                )}
++                                                {post.updated_at !==
++                                                    post.created_at &&
++                                                    ` · ${t(
++                                                        'posts.edited'
++                                                    )}`}
++                                            </p>
++                                        </div>
++
++                                        {post.is_own && (
++                                            <div className="flex items-center gap-1">
++                                                <button
++                                                    type="button"
++                                                    onClick={() =>
++                                                        edit(post)
++                                                    }
++                                                    className="rounded-input p-2 text-muted-foreground hover:bg-surface-2"
++                                                    aria-label={t(
++                                                        'posts.edit'
++                                                    )}
++                                                >
++                                                    <Edit2 className="h-4 w-4" />
++                                                </button>
++
++                                                <button
++                                                    type="button"
++                                                    onClick={() =>
++                                                        void remove(
++                                                            post
++                                                        )
++                                                    }
++                                                    className="rounded-input p-2 text-danger/70 hover:bg-danger/10"
++                                                    aria-label={t(
++                                                        'posts.delete'
++                                                    )}
++                                                >
++                                                    <Trash2 className="h-4 w-4" />
++                                                </button>
++                                            </div>
++                                        )}
++                                    </div>
++
++                                    {post.content && (
++                                        <p className="mt-4 whitespace-pre-wrap break-words text-body text-foreground">
++                                            {post.content}
++                                        </p>
++                                    )}
++
++                                    {post.image_url && (
++                                        <img
++                                            src={post.image_url}
++                                            alt={t(
++                                                'posts.sharedPhoto'
++                                            )}
++                                            className="mt-4 max-h-[600px] w-full rounded-card border border-border bg-surface-2 object-contain"
++                                        />
++                                    )}
++
++                                    {post.link_url && (
++                                        <a
++                                            href={post.link_url}
++                                            target="_blank"
++                                            rel="noreferrer"
++                                            className="mt-4 flex min-w-0 items-center gap-2 rounded-input border border-border bg-surface-2 px-3 py-2 text-caption text-primary hover:underline"
++                                        >
++                                            <ExternalLink className="h-4 w-4 shrink-0" />
++                                            <span className="truncate">
++                                                {
++                                                    post.link_url
++                                                }
++                                            </span>
++                                        </a>
++                                    )}
++
++                                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
++                                        <p className="text-micro text-muted-foreground">
++                                            {post.seen_by.length
++                                                ? t(
++                                                      'posts.seenBy',
++                                                      {
++                                                          names: post.seen_by
++                                                              .map(
++                                                                  (
++                                                                      person
++                                                                  ) =>
++                                                                      person.name
++                                                              )
++                                                              .join(
++                                                                  ', '
++                                                              ),
++                                                      }
++                                                  )
++                                                : t(
++                                                      'posts.notSeen'
++                                                  )}
++                                        </p>
++
++                                        <button
++                                            type="button"
++                                            disabled={
++                                                post.is_seen
++                                            }
++                                            onClick={() =>
++                                                void markSeen(
++                                                    post
++                                                )
++                                            }
++                                            className={`inline-flex items-center gap-1.5 rounded-input px-3 py-1.5 text-caption font-medium ${
++                                                post.is_seen
++                                                    ? 'text-success'
++                                                    : 'bg-primary-soft text-primary hover:bg-primary/15'
++                                            }`}
++                                        >
++                                            {post.is_seen ? (
++                                                <CheckCheck className="h-4 w-4" />
++                                            ) : (
++                                                <Check className="h-4 w-4" />
++                                            )}
++
++                                            {post.is_seen
++                                                ? t(
++                                                      'posts.seen'
++                                                  )
++                                                : t(
++                                                      'posts.markSeen'
++                                                  )}
++                                        </button>
++                                    </div>
++                                </div>
++                            </div>
++                        </article>
++                    ))}
++                </div>
++            )}
++        </div>
++    );
++};
++
++export default Posts;
+diff --git a/server/migrations/007_family_posts.sql b/server/migrations/007_family_posts.sql
+new file mode 100644
+index 0000000000000000000000000000000000000000..92d15646b26023081de0c9597e462bd7142af4f0
+--- /dev/null
++++ b/server/migrations/007_family_posts.sql
+@@ -0,0 +1,26 @@
++CREATE TABLE IF NOT EXISTS family_posts (
++    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
++    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++    author_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++    content TEXT,
++    image_url TEXT,
++    link_url TEXT,
++    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
++);
++
++CREATE INDEX IF NOT EXISTS idx_family_posts_user_created
++    ON family_posts(user_id, created_at DESC);
++
++CREATE INDEX IF NOT EXISTS idx_family_posts_author
++    ON family_posts(author_user_id);
++
++CREATE TABLE IF NOT EXISTS family_post_seen (
++    post_id UUID NOT NULL REFERENCES family_posts(id) ON DELETE CASCADE,
++    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++    seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    PRIMARY KEY (post_id, user_id)
++);
++
++CREATE INDEX IF NOT EXISTS idx_family_post_seen_user
++    ON family_post_seen(user_id);
+diff --git a/server/schema.sql b/server/schema.sql
+index 64830a8ca576479e1b0ba8e84d14b5416c9c7dd9..370978ed917c02d217a50aa65963a4ad3d3bcd93 100644
+--- a/server/schema.sql
++++ b/server/schema.sql
+@@ -305,3 +305,32 @@ CREATE TRIGGER update_recipes_updated_at BEFORE UPDATE ON recipes FOR EACH ROW E
+ CREATE TRIGGER update_meal_plans_updated_at BEFORE UPDATE ON meal_plans FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+ CREATE TRIGGER update_budget_entries_updated_at BEFORE UPDATE ON budget_entries FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+ CREATE TRIGGER update_notifications_updated_at BEFORE UPDATE ON notifications FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
++
++
++-- Family Posts
++CREATE TABLE IF NOT EXISTS family_posts (
++    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
++    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++    author_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++    content TEXT,
++    image_url TEXT,
++    link_url TEXT,
++    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
++);
++
++CREATE INDEX IF NOT EXISTS idx_family_posts_user_created
++    ON family_posts(user_id, created_at DESC);
++
++CREATE INDEX IF NOT EXISTS idx_family_posts_author
++    ON family_posts(author_user_id);
++
++CREATE TABLE IF NOT EXISTS family_post_seen (
++    post_id UUID NOT NULL REFERENCES family_posts(id) ON DELETE CASCADE,
++    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++    seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    PRIMARY KEY (post_id, user_id)
++);
++
++CREATE INDEX IF NOT EXISTS idx_family_post_seen_user
++    ON family_post_seen(user_id);
+diff --git a/server/src/app.ts b/server/src/app.ts
+index 9f294549bf175109246f816559b62c2a95730191..de3fc1302e4937ec17cb04baf0655af5fb37d481 100644
+--- a/server/src/app.ts
++++ b/server/src/app.ts
+@@ -24,6 +24,7 @@ import notesRoutes from './routes/notes';
+ import aiRoutes from './routes/ai';
+ import categoriesRoutes from './routes/categories';
+ import kakeiboRoutes from './routes/kakeibo';
++import postsRoutes from './routes/posts';
+ import { loadEnv } from './config/loadEnv';
+ import logger from './lib/logger';
+ 
+@@ -186,6 +187,7 @@ app.use('/api/ai', aiRoutes);
+ app.use('/api/categories', categoriesRoutes);
+ app.use('/api/kakeibo', kakeiboRoutes);
+ 
++app.use('/api/posts', postsRoutes);
+ // Static client (native Windows install): serve the built SPA from the same origin
+ // as the API, so the app is reachable from any device on the LAN via http://<ip>:3000.
+ if (process.env.SERVE_CLIENT_DIR) {
+diff --git a/server/src/db.ts b/server/src/db.ts
+index 4a3d36d9a9fdf5397af684107a2a6e70d070b080..53ee9fe572bbe20b4b503637a8c8eb8712d696ab 100644
+--- a/server/src/db.ts
++++ b/server/src/db.ts
+@@ -428,6 +428,26 @@ export const runMigrations = async () => {
+         // Migration 027: recurring Budget transactions may be income or expense.
+         // Existing rows remain expenses, preserving all current behaviour.
+         "ALTER TABLE recurring_expenses ADD COLUMN IF NOT EXISTS is_expense BOOLEAN NOT NULL DEFAULT true",
++        // Community Family Posts
++        `CREATE TABLE IF NOT EXISTS family_posts (
++            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
++            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++            author_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++            content TEXT,
++            image_url TEXT,
++            link_url TEXT,
++            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
++            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
++        )`,
++        'CREATE INDEX IF NOT EXISTS idx_family_posts_user_created ON family_posts(user_id, created_at DESC)',
++        'CREATE INDEX IF NOT EXISTS idx_family_posts_author ON family_posts(author_user_id)',
++        `CREATE TABLE IF NOT EXISTS family_post_seen (
++            post_id UUID NOT NULL REFERENCES family_posts(id) ON DELETE CASCADE,
++            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++            seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
++            PRIMARY KEY (post_id, user_id)
++        )`,
++        'CREATE INDEX IF NOT EXISTS idx_family_post_seen_user ON family_post_seen(user_id)',
+     ];
+ 
+     
+diff --git a/server/src/lib/broadcaster.ts b/server/src/lib/broadcaster.ts
+index dfede4848b5835aa4fa25021875baaa4978e91d7..7b4dd76ce32d6402a7d33be0f38b2babc015e80f 100644
+--- a/server/src/lib/broadcaster.ts
++++ b/server/src/lib/broadcaster.ts
+@@ -12,7 +12,8 @@ export type WsEntity =
+     | 'notifications'
+     | 'integrations'
+     | 'rewards'
+-    | 'notes';
++    | 'notes'
++    | 'posts';
+ 
+ export type WsAction = 'created' | 'updated' | 'deleted' | 'synced';
+ 
+diff --git a/server/src/routes/familyInvites.ts b/server/src/routes/familyInvites.ts
+index 3e78e316c7a41d8c5f6adcf5d1dd9c6827092dc4..048724fd43863d2f5ac3782bbce9786d7e60ca1c 100644
+--- a/server/src/routes/familyInvites.ts
++++ b/server/src/routes/familyInvites.ts
+@@ -286,6 +286,7 @@ router.put('/members/:userId/role', async (req: AuthRequest, res) => {
+ // Family-scoped tables whose user_id points to the family owner.
+ const FAMILY_SCOPED_TABLES = [
+     'family_members',
++    'family_posts',
+     'shopping_items',
+     'shopping_list_templates',
+     'tasks',
+diff --git a/server/src/routes/posts.ts b/server/src/routes/posts.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..560b39fd7fd90294af6cc89897780bffa11225c8
+--- /dev/null
++++ b/server/src/routes/posts.ts
+@@ -0,0 +1,487 @@
++import { Router } from 'express';
++import { query } from '../db';
++import { authMiddleware, AuthRequest } from '../middleware/auth';
++import { broadcast } from '../lib/broadcaster';
++
++const router = Router();
++router.use(authMiddleware);
++
++const MAX_CONTENT = 5000;
++const MAX_IMAGE = 2_000_000;
++const MAX_LINK = 2000;
++
++const cleanContent = (value: unknown): string | null => {
++    if (typeof value !== 'string') return null;
++    const v = value.trim();
++    return v ? v.slice(0, MAX_CONTENT) : null;
++};
++
++const cleanImage = (value: unknown): string | null => {
++    if (typeof value !== 'string' || !value.trim()) return null;
++
++    const v = value.trim();
++
++    if (v.length > MAX_IMAGE) {
++        throw new Error('IMAGE_TOO_LARGE');
++    }
++
++    if (!/^data:image\/(?:jpeg|jpg|png|webp);base64,/i.test(v)) {
++        throw new Error('INVALID_IMAGE');
++    }
++
++    return v;
++};
++
++const cleanLink = (value: unknown): string | null => {
++    if (typeof value !== 'string' || !value.trim()) return null;
++
++    const v = value.trim();
++
++    if (v.length > MAX_LINK) {
++        throw new Error('INVALID_LINK');
++    }
++
++    try {
++        const url = new URL(v);
++
++        if (!['http:', 'https:'].includes(url.protocol)) {
++            throw new Error();
++        }
++
++        return url.toString();
++    } catch {
++        throw new Error('INVALID_LINK');
++    }
++};
++
++const loadPosts = async (
++    ownerId: string,
++    actualUserId: string,
++    limit = 100,
++    postId?: string
++) => {
++    const values: unknown[] = [ownerId];
++    let postFilter = '';
++
++    if (postId) {
++        values.push(postId);
++        postFilter = ` AND p.id = $${values.length}`;
++    }
++
++    values.push(Math.min(Math.max(limit, 1), 100));
++
++    const result = await query(
++        `SELECT
++            p.id,
++            p.user_id,
++            p.author_user_id,
++            p.content,
++            p.image_url,
++            p.link_url,
++            p.created_at,
++            p.updated_at,
++            u.name AS author_name,
++            COALESCE(fm.avatar_url, u.avatar_url) AS author_avatar
++         FROM family_posts p
++         JOIN users u
++           ON u.id = p.author_user_id
++         LEFT JOIN LATERAL (
++             SELECT avatar_url
++             FROM family_members
++             WHERE user_id = p.user_id
++               AND linked_user_id = p.author_user_id
++             LIMIT 1
++         ) fm ON TRUE
++         WHERE p.user_id = $1
++         ${postFilter}
++         ORDER BY p.created_at DESC
++         LIMIT $${values.length}`,
++        values
++    );
++
++    if (result.rows.length === 0) return [];
++
++    const ids = result.rows.map((r: { id: string }) => r.id);
++
++    const seen = await query(
++        `SELECT
++            s.post_id,
++            s.user_id,
++            u.name,
++            s.seen_at
++         FROM family_post_seen s
++         JOIN users u ON u.id = s.user_id
++         WHERE s.post_id = ANY($1::uuid[])
++           AND (u.id = $2 OR u.family_owner_id = $2)
++         ORDER BY s.seen_at ASC`,
++        [ids, ownerId]
++    );
++
++    return result.rows.map((post: any) => {
++        const seenBy = seen.rows
++            .filter((row: any) => row.post_id === post.id)
++            .map((row: any) => ({
++                id: row.user_id,
++                name: row.name,
++                seen_at: row.seen_at,
++            }));
++
++        return {
++            ...post,
++            seen_by: seenBy,
++            is_seen: seenBy.some((row: any) => row.id === actualUserId),
++            is_own: post.author_user_id === actualUserId,
++        };
++    });
++};
++
++router.get('/', async (req: AuthRequest, res) => {
++    try {
++        if (!req.userId || !req.actualUserId) {
++            return res.status(401).json({
++                success: false,
++                error: 'Invalid authentication',
++            });
++        }
++
++        return res.json({
++            success: true,
++            data: await loadPosts(req.userId, req.actualUserId),
++        });
++    } catch (error) {
++        console.error('Get posts error:', error);
++        return res.status(500).json({
++            success: false,
++            error: 'Internal server error',
++        });
++    }
++});
++
++router.get('/latest', async (req: AuthRequest, res) => {
++    try {
++        if (!req.userId || !req.actualUserId) {
++            return res.status(401).json({
++                success: false,
++                error: 'Invalid authentication',
++            });
++        }
++
++        const posts = await loadPosts(
++            req.userId,
++            req.actualUserId,
++            1
++        );
++
++        return res.json({
++            success: true,
++            data: posts[0] ?? null,
++        });
++    } catch (error) {
++        console.error('Get latest post error:', error);
++        return res.status(500).json({
++            success: false,
++            error: 'Internal server error',
++        });
++    }
++});
++
++router.post('/', async (req: AuthRequest, res) => {
++    try {
++        if (!req.userId || !req.actualUserId) {
++            return res.status(401).json({
++                success: false,
++                error: 'Invalid authentication',
++            });
++        }
++
++        const account = await query(
++            `SELECT id
++             FROM users
++             WHERE id = $1
++               AND (id = $2 OR family_owner_id = $2)`,
++            [req.actualUserId, req.userId]
++        );
++
++        if (account.rows.length === 0) {
++            return res.status(403).json({
++                success: false,
++                error: 'Not a member of this family',
++            });
++        }
++
++        const content = cleanContent(req.body?.content);
++        const imageUrl = cleanImage(req.body?.image_url);
++        const linkUrl = cleanLink(req.body?.link_url);
++
++        if (!content && !imageUrl && !linkUrl) {
++            return res.status(400).json({
++                success: false,
++                error: 'A post must contain text, a photo, or a link',
++            });
++        }
++
++        const result = await query(
++            `INSERT INTO family_posts (
++                user_id,
++                author_user_id,
++                content,
++                image_url,
++                link_url
++             )
++             VALUES ($1, $2, $3, $4, $5)
++             RETURNING id`,
++            [
++                req.userId,
++                req.actualUserId,
++                content,
++                imageUrl,
++                linkUrl,
++            ]
++        );
++
++        const id = result.rows[0].id as string;
++
++        await query(
++            `INSERT INTO family_post_seen (post_id, user_id)
++             VALUES ($1, $2)
++             ON CONFLICT DO NOTHING`,
++            [id, req.actualUserId]
++        );
++
++        const posts = await loadPosts(
++            req.userId,
++            req.actualUserId,
++            1,
++            id
++        );
++
++        broadcast(req.userId, {
++            type: 'update',
++            entity: 'posts',
++            action: 'created',
++        });
++
++        return res.json({
++            success: true,
++            data: posts[0],
++        });
++    } catch (error) {
++        if (error instanceof Error) {
++            if (error.message === 'IMAGE_TOO_LARGE') {
++                return res.status(400).json({
++                    success: false,
++                    error: 'Photo is too large',
++                });
++            }
++
++            if (error.message === 'INVALID_IMAGE') {
++                return res.status(400).json({
++                    success: false,
++                    error: 'Invalid photo',
++                });
++            }
++
++            if (error.message === 'INVALID_LINK') {
++                return res.status(400).json({
++                    success: false,
++                    error: 'Invalid link',
++                });
++            }
++        }
++
++        console.error('Create post error:', error);
++        return res.status(500).json({
++            success: false,
++            error: 'Internal server error',
++        });
++    }
++});
++
++router.put('/:id', async (req: AuthRequest, res) => {
++    try {
++        if (!req.userId || !req.actualUserId) {
++            return res.status(401).json({
++                success: false,
++                error: 'Invalid authentication',
++            });
++        }
++
++        const content = cleanContent(req.body?.content);
++        const imageUrl = cleanImage(req.body?.image_url);
++        const linkUrl = cleanLink(req.body?.link_url);
++
++        if (!content && !imageUrl && !linkUrl) {
++            return res.status(400).json({
++                success: false,
++                error: 'A post must contain text, a photo, or a link',
++            });
++        }
++
++        const result = await query(
++            `UPDATE family_posts
++             SET content = $1,
++                 image_url = $2,
++                 link_url = $3,
++                 updated_at = CURRENT_TIMESTAMP
++             WHERE id = $4
++               AND user_id = $5
++               AND author_user_id = $6
++             RETURNING id`,
++            [
++                content,
++                imageUrl,
++                linkUrl,
++                req.params.id,
++                req.userId,
++                req.actualUserId,
++            ]
++        );
++
++        if (result.rows.length === 0) {
++            return res.status(404).json({
++                success: false,
++                error: 'Post not found or cannot be edited',
++            });
++        }
++
++        const posts = await loadPosts(
++            req.userId,
++            req.actualUserId,
++            1,
++            req.params.id
++        );
++
++        broadcast(req.userId, {
++            type: 'update',
++            entity: 'posts',
++            action: 'updated',
++        });
++
++        return res.json({
++            success: true,
++            data: posts[0],
++        });
++    } catch (error) {
++        if (
++            error instanceof Error &&
++            ['IMAGE_TOO_LARGE', 'INVALID_IMAGE', 'INVALID_LINK'].includes(
++                error.message
++            )
++        ) {
++            return res.status(400).json({
++                success: false,
++                error: error.message,
++            });
++        }
++
++        console.error('Update post error:', error);
++        return res.status(500).json({
++            success: false,
++            error: 'Internal server error',
++        });
++    }
++});
++
++router.delete('/:id', async (req: AuthRequest, res) => {
++    try {
++        if (!req.userId || !req.actualUserId) {
++            return res.status(401).json({
++                success: false,
++                error: 'Invalid authentication',
++            });
++        }
++
++        const result = await query(
++            `DELETE FROM family_posts
++             WHERE id = $1
++               AND user_id = $2
++               AND author_user_id = $3
++             RETURNING id`,
++            [
++                req.params.id,
++                req.userId,
++                req.actualUserId,
++            ]
++        );
++
++        if (result.rows.length === 0) {
++            return res.status(404).json({
++                success: false,
++                error: 'Post not found or cannot be deleted',
++            });
++        }
++
++        broadcast(req.userId, {
++            type: 'update',
++            entity: 'posts',
++            action: 'deleted',
++        });
++
++        return res.json({ success: true });
++    } catch (error) {
++        console.error('Delete post error:', error);
++        return res.status(500).json({
++            success: false,
++            error: 'Internal server error',
++        });
++    }
++});
++
++router.post('/:id/seen', async (req: AuthRequest, res) => {
++    try {
++        if (!req.userId || !req.actualUserId) {
++            return res.status(401).json({
++                success: false,
++                error: 'Invalid authentication',
++            });
++        }
++
++        const exists = await query(
++            `SELECT id
++             FROM family_posts
++             WHERE id = $1
++               AND user_id = $2`,
++            [req.params.id, req.userId]
++        );
++
++        if (exists.rows.length === 0) {
++            return res.status(404).json({
++                success: false,
++                error: 'Post not found',
++            });
++        }
++
++        await query(
++            `INSERT INTO family_post_seen (post_id, user_id)
++             VALUES ($1, $2)
++             ON CONFLICT (post_id, user_id) DO NOTHING`,
++            [req.params.id, req.actualUserId]
++        );
++
++        const posts = await loadPosts(
++            req.userId,
++            req.actualUserId,
++            1,
++            req.params.id
++        );
++
++        broadcast(req.userId, {
++            type: 'update',
++            entity: 'posts',
++            action: 'updated',
++        });
++
++        return res.json({
++            success: true,
++            data: posts[0],
++        });
++    } catch (error) {
++        console.error('Mark post seen error:', error);
++        return res.status(500).json({
++            success: false,
++            error: 'Internal server error',
++        });
++    }
++});
++
++export default router;
