@@ -1,0 +1,610 @@
+diff --git a/client/src/i18n/locales/en/ai.json b/client/src/i18n/locales/en/ai.json
+index e7fda13e2f8ec88c380c0e2a4e5df1d45ef923c9..a283949de2f1dab23edda739c85e158dacf1780d 100644
+--- a/client/src/i18n/locales/en/ai.json
++++ b/client/src/i18n/locales/en/ai.json
+@@ -42,7 +42,8 @@
+     "providers": {
+       "ollama": "Ollama (local)",
+       "openai": "OpenAI-compatible API",
+-      "anthropic": "Anthropic Claude"
++      "anthropic": "Anthropic Claude",
++      "gemini": "Google Gemini"
+     },
+     "baseUrl": "Server URL",
+     "apiKey": "API key",
+diff --git a/client/src/i18n/locales/fr/ai.json b/client/src/i18n/locales/fr/ai.json
+index 90c28a997a5ea358b8c31e1dcc54bc85fce47325..08709725beb25266ed8867d418b076dd4fa17d08 100644
+--- a/client/src/i18n/locales/fr/ai.json
++++ b/client/src/i18n/locales/fr/ai.json
+@@ -42,7 +42,8 @@
+     "providers": {
+       "ollama": "Ollama (local)",
+       "openai": "API compatible OpenAI",
+-      "anthropic": "Anthropic Claude"
++      "anthropic": "Anthropic Claude",
++      "gemini": "Google Gemini"
+     },
+     "baseUrl": "URL du serveur",
+     "apiKey": "Clé API",
+diff --git a/client/src/i18n/locales/pt/ai.json b/client/src/i18n/locales/pt/ai.json
+index 55e452f2a3d48a190c550fdf9a49beab7b0f3789..7cc7d00711a73947dfd04fd4b4360907decd83fe 100644
+--- a/client/src/i18n/locales/pt/ai.json
++++ b/client/src/i18n/locales/pt/ai.json
+@@ -42,7 +42,8 @@
+     "providers": {
+       "ollama": "Ollama (Local / Autohospedado)",
+       "openai": "API compatível com OpenAI (OpenAI, Gemini, Groq, DeepSeek...)",
+-      "anthropic": "Anthropic Claude"
++      "anthropic": "Anthropic Claude",
++      "gemini": "Google Gemini"
+     },
+     "baseUrl": "URL do Servidor / Endpoint",
+     "apiKey": "Chave de API (API Key)",
+diff --git a/client/src/i18n/locales/zh/ai.json b/client/src/i18n/locales/zh/ai.json
+index 2ea794e3dfa05af2f7b03debdb784bae8158106e..edfa916184faa2fd48b4c29805afb6b1f265f1d3 100644
+--- a/client/src/i18n/locales/zh/ai.json
++++ b/client/src/i18n/locales/zh/ai.json
+@@ -42,7 +42,8 @@
+     "providers": {
+       "ollama": "Ollama（本地）",
+       "openai": "OpenAI 兼容 API",
+-      "anthropic": "Anthropic Claude"
++      "anthropic": "Anthropic Claude",
++      "gemini": "Google Gemini"
+     },
+     "baseUrl": "服务器 URL",
+     "apiKey": "API 密钥",
+diff --git a/client/src/lib/aiStatus.ts b/client/src/lib/aiStatus.ts
+index cba0c40646dc933ff9125d080e79ac2b850427ad..1e1d2ab0cbdd425f02ac21721eea23a03aab47f6 100644
+--- a/client/src/lib/aiStatus.ts
++++ b/client/src/lib/aiStatus.ts
+@@ -6,7 +6,7 @@ import { api } from './api';
+ export interface AiStatus {
+     configured: boolean;
+     enabled: boolean;
+-    provider?: 'ollama' | 'openai' | 'anthropic';
++    provider?: 'ollama' | 'openai' | 'anthropic' | 'gemini';
+     base_url?: string | null;
+     model?: string;
+     has_api_key?: boolean;
+diff --git a/client/src/pages/Budget.tsx b/client/src/pages/Budget.tsx
+index 93b24a16f2f8a06a6336fe65c15bfb834b0c1ddd..528286f911f04da51f28f08a28e9c5afbd8e8d8a 100644
+--- a/client/src/pages/Budget.tsx
++++ b/client/src/pages/Budget.tsx
+@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
+ import { formatCurrency } from '../lib/utils';
+ import {
+     Plus, ChevronLeft, ChevronRight, Check, RefreshCw,
+-    Trash2, Edit2, TrendingUp, TrendingDown, Wallet, Eye,
++    Trash2, Edit2, TrendingUp, TrendingDown, Wallet, Eye, EyeOff,
+     X, Calendar, AlertTriangle, Lock
+ } from 'lucide-react';
+ import {
+@@ -203,6 +203,7 @@ const Budget: React.FC = () => {
+     const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+ 
+     const [forecast, setForecast] = useState<Forecast | null>(null);
++    const [showForecast, setShowForecast] = useState(false);
+     const [recurring, setRecurring] = useState<RecurringTransaction[]>([]);
+     const [entries, setEntries] = useState<BudgetEntry[]>([]);
+     const [loading, setLoading] = useState(true);
+@@ -748,19 +749,38 @@ const Budget: React.FC = () => {
+                     forecast.upcomingRecurringIncome > 0
+                 ) && (
+                     <div className={`rounded-card p-4 border-2 ${forecastPositive ? 'border-info/20 bg-info/5' : 'border-peach/20 bg-peach/5'}`}>
+-                        <div className="flex items-center gap-2 mb-1">
+-                            <Eye className={`w-4 h-4 ${forecastPositive ? 'text-info' : 'text-peach'}`} />
+-                            <span className="text-sm font-medium text-muted-foreground">{t('budget:forecast.title')}</span>
++                        <div className={`flex items-center justify-between ${showForecast ? 'mb-1' : ''}`}>
++                            <span className="text-sm font-medium text-muted-foreground">
++                                {t('budget:forecast.title')}
++                            </span>
++                            <button
++                                type="button"
++                                onClick={() => setShowForecast((visible) => !visible)}
++                                className="p-1.5 rounded-lg hover:bg-foreground/5 transition-colors"
++                                aria-label={showForecast ? 'Hide forecast' : 'Show forecast'}
++                                title={showForecast ? 'Hide forecast' : 'Show forecast'}
++                            >
++                                {showForecast ? (
++                                    <EyeOff className={`w-4 h-4 ${forecastPositive ? 'text-info' : 'text-peach'}`} />
++                                ) : (
++                                    <Eye className={`w-4 h-4 ${forecastPositive ? 'text-info' : 'text-peach'}`} />
++                                )}
++                            </button>
+                         </div>
+-                        <p className={`text-3xl font-bold ${forecastPositive ? 'text-info' : 'text-peach'}`}>
+-                            {formatCurrency(forecast.forecastBalance, currency)}
+-                        </p>
+-                        <p className="text-xs text-muted-foreground mt-1">
+-                            {t('budget:forecast.subtitle', {
+-                                income: formatCurrency(forecast.upcomingRecurringIncome, currency),
+-                                expenses: formatCurrency(forecast.upcomingRecurringExpenses, currency),
+-                            })}
+-                        </p>
++
++                        {showForecast && (
++                            <>
++                                <p className={`text-3xl font-bold ${forecastPositive ? 'text-info' : 'text-peach'}`}>
++                                    {formatCurrency(forecast.forecastBalance, currency)}
++                                </p>
++                                <p className="text-xs text-muted-foreground mt-1">
++                                    {t('budget:forecast.subtitle', {
++                                        income: formatCurrency(forecast.upcomingRecurringIncome, currency),
++                                        expenses: formatCurrency(forecast.upcomingRecurringExpenses, currency),
++                                    })}
++                                </p>
++                            </>
++                        )}
+                     </div>
+                 )}
+ 
+@@ -788,28 +808,29 @@ const Budget: React.FC = () => {
+                             {recurring.map((r) => (
+                                 <div
+                                     key={r.occurrence_id ?? `${r.id}:${r.occurrence_date ?? r.debit_day}`}
+-                                    className={`flex items-center gap-3 rounded-card p-4 transition-all
++                                    className={`grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-3 gap-y-2 rounded-card p-4 transition-all
++                                        sm:flex sm:items-center sm:gap-3
+                                         ${r.is_pointed ? 'bg-surface-1 opacity-60' : 'bg-surface-1 border border-border shadow-sm'}`}
+                                 >
+                                     <button
+                                         onClick={() => handleTogglePoint(r)}
+                                         disabled={!canEdit}
+-                                        className={`flex-shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center
+-                                            transition-all active:scale-90 disabled:opacity-50
++                                        className={`row-span-2 self-center flex-shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center
++                                            sm:row-auto transition-all active:scale-90 disabled:opacity-50
+                                             ${r.is_pointed ? 'bg-success/100 border-success' : 'border-border hover:border-success/50'}`}
+                                         title={r.is_pointed ? t('budget:recurring.markOff') : t('budget:recurring.markOn')}
+                                     >
+                                         {r.is_pointed && <Check className="w-4 h-4 text-white" strokeWidth={3} />}
+                                     </button>
+ 
+-                                    <div className="flex-1 min-w-0">
+-                                        <p className={`font-medium text-base truncate ${r.is_pointed ? 'line-through text-muted-foreground' : ''}`}>
++                                    <div className="col-start-2 min-w-0 sm:flex-1">
++                                        <p className={`font-medium text-base break-words sm:truncate ${r.is_pointed ? 'line-through text-muted-foreground' : ''}`}>
+                                             {r.label}
+                                         </p>
+-                                        <div className="flex items-center gap-2 mt-0.5">
+-                                            <span className="text-xs text-muted-foreground">{categoryLabel(r.category)}</span>
++                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
++                                            <span className="text-xs text-muted-foreground whitespace-nowrap">{categoryLabel(r.category)}</span>
+                                             <span className="text-xs text-muted-foreground">·</span>
+-                                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
++                                            <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
+                                                 <Calendar className="w-3 h-3" />
+                                                 {r.occurrence_date
+                                                     ? new Date(`${r.occurrence_date}T00:00:00`).toLocaleDateString(undefined, {
+@@ -819,13 +840,13 @@ const Budget: React.FC = () => {
+                                                     : `${t('budget:recurring.dayPrefix')} ${r.debit_day}`}
+                                             </span>
+                                             <span className="text-xs text-muted-foreground">·</span>
+-                                            <span className="text-xs text-muted-foreground">
++                                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                                 {t(`budget:recurring.frequency.${r.recurrence_frequency}`)}
+                                             </span>
+                                         </div>
+                                     </div>
+ 
+-                                    <span className={`text-base font-bold flex-shrink-0 ${
++                                    <span className={`col-start-2 text-base font-bold flex-shrink-0 sm:col-auto ${
+                                         r.is_pointed
+                                             ? 'text-muted-foreground'
+                                             : r.is_expense
+@@ -835,7 +856,7 @@ const Budget: React.FC = () => {
+                                         {r.is_expense ? '-' : '+'}{formatCurrency(r.amount, currency)}
+                                     </span>
+ 
+-                                    <div className="flex items-center gap-1 flex-shrink-0">
++                                    <div className="col-start-3 row-start-1 flex items-center gap-1 flex-shrink-0 sm:row-auto sm:col-auto">
+                                         {canEdit && (
+                                             <>
+                                                 <button
+diff --git a/client/src/pages/Calendar.tsx b/client/src/pages/Calendar.tsx
+index c5d3f71622ea176526e956f9450380f3595f5f21..5982a370f58f165c90bf92322231a678f650c046 100644
+--- a/client/src/pages/Calendar.tsx
++++ b/client/src/pages/Calendar.tsx
+@@ -850,6 +850,8 @@ const Calendar: React.FC = () => {
+             {/* Calendar Header */}
+             <Card>
+                 <CardContent className="p-6">
++                    <div className="overflow-x-auto">
++                        <div className="min-w-[800px] lg:min-w-0">
+                     <div className="flex items-center justify-between mb-6">
+                         <h2 className="text-h2 font-semibold capitalize">
+                             {format(currentDate, 'MMMM yyyy', { locale: dateLocale() })}
+@@ -952,6 +954,8 @@ const Calendar: React.FC = () => {
+                             );
+                         })}
+                     </div>
++                        </div>
++                    </div>
+                 </CardContent>
+             </Card>
+ 
+diff --git a/client/src/pages/Planning.tsx b/client/src/pages/Planning.tsx
+index 0ad43d94cf04cddc523f49ac4798404976ae50a0..a573bc1b66cace8548c28e5a697d22ad798e5eae 100644
+--- a/client/src/pages/Planning.tsx
++++ b/client/src/pages/Planning.tsx
+@@ -618,7 +618,7 @@ const Planning: React.FC = () => {
+                 </CardContent>
+             </Card>
+ 
+-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-7">
++            <div className="grid grid-cols-1 gap-4">
+                 {DAYS.map((day, index) => {
+                     const dateForHeader = addDays(weekStart, index);
+                     const dayEntries = visibleEntries.filter((entry) => entry.day_of_week === day.value);
+diff --git a/client/src/pages/Settings.tsx b/client/src/pages/Settings.tsx
+index 689fedc3657a7b236ab663c03480141c7569122c..848a3250e3ced29712900adf788f6033aa19a0fa 100644
+--- a/client/src/pages/Settings.tsx
++++ b/client/src/pages/Settings.tsx
+@@ -37,18 +37,20 @@ const CURRENCIES = [
+     { code: 'BRL', label: 'Brazilian Real (R$)' },
+ ];
+ 
+-type AiProvider = 'ollama' | 'openai' | 'anthropic';
++type AiProvider = 'ollama' | 'openai' | 'anthropic' | 'gemini';
+ 
+ const AI_MODEL_PLACEHOLDERS: Record<AiProvider, string> = {
+     ollama: 'llama3.1',
+     openai: 'gpt-4o-mini',
+     anthropic: 'claude-opus-4-8',
++    gemini: 'gemini-3.8-flash',
+ };
+ 
+ const AI_BASE_URL_PLACEHOLDERS: Record<AiProvider, string> = {
+     ollama: 'http://localhost:11434',
+     openai: 'https://api.openai.com',
+     anthropic: '',
++    gemini: '',
+ };
+ 
+ interface AiSettingsData {
+@@ -121,7 +123,7 @@ const AiAssistantCard: React.FC<{ isParent: boolean }> = ({ isParent }) => {
+             const trimmedKey = apiKey.trim();
+             const response = await api.put<{ success: boolean; data: AiSettingsData }>('/api/ai/settings', {
+                 provider,
+-                base_url: provider === 'anthropic' ? null : baseUrl.trim() || null,
++                base_url: provider === 'anthropic' || provider === 'gemini' ? null : baseUrl.trim() || null,
+                 // '' keeps the stored key, explicit null clears it.
+                 api_key: trimmedKey ? trimmedKey : apiKeyCleared ? null : '',
+                 model: model.trim(),
+@@ -148,7 +150,7 @@ const AiAssistantCard: React.FC<{ isParent: boolean }> = ({ isParent }) => {
+         try {
+             const response = await api.post<{ success: boolean; message?: string }>('/api/ai/test', {
+                 provider,
+-                base_url: provider === 'anthropic' ? undefined : baseUrl.trim() || undefined,
++                base_url: provider === 'anthropic' || provider === 'gemini' ? undefined : baseUrl.trim() || undefined,
+                 api_key: apiKey.trim() || undefined,
+                 model: model.trim() || undefined,
+             });
+@@ -164,6 +166,7 @@ const AiAssistantCard: React.FC<{ isParent: boolean }> = ({ isParent }) => {
+         { value: 'ollama', label: t('ai:settings.providers.ollama') },
+         { value: 'openai', label: t('ai:settings.providers.openai') },
+         { value: 'anthropic', label: t('ai:settings.providers.anthropic') },
++        { value: 'gemini', label: t('ai:settings.providers.gemini') },
+     ];
+ 
+     return (
+@@ -208,7 +211,7 @@ const AiAssistantCard: React.FC<{ isParent: boolean }> = ({ isParent }) => {
+                                     )}
+                                 </div>
+ 
+-                                {provider !== 'anthropic' && (
++                                {provider !== 'anthropic' && provider !== 'gemini' && (
+                                     <Input
+                                         label={t('ai:settings.baseUrl')}
+                                         value={baseUrl}
+@@ -228,7 +231,13 @@ const AiAssistantCard: React.FC<{ isParent: boolean }> = ({ isParent }) => {
+                                                 setApiKey(e.target.value);
+                                                 setTestResult(null);
+                                             }}
+-                                            placeholder={hasApiKey && !apiKeyCleared ? t('ai:settings.keyKept') : 'sk-…'}
++                                            placeholder={
++                                                hasApiKey && !apiKeyCleared
++                                                    ? t('ai:settings.keyKept')
++                                                    : provider === 'gemini'
++                                                        ? 'AIza…'
++                                                        : 'sk-…'
++                                            }
+                                             disabled={!isParent}
+                                             autoComplete="off"
+                                         />
+diff --git a/server/migrations/006_add_gemini_ai_provider.sql b/server/migrations/006_add_gemini_ai_provider.sql
+new file mode 100644
+index 0000000000000000000000000000000000000000..4fd1970b1d38ab59d8ccf727105ab16c7ede6c09
+--- /dev/null
++++ b/server/migrations/006_add_gemini_ai_provider.sql
+@@ -0,0 +1,18 @@
++-- Add Google Gemini as a supported OpenFamily AI provider.
++DO $$
++BEGIN
++    IF EXISTS (
++        SELECT 1
++        FROM pg_constraint
++        WHERE conname = 'ai_settings_provider_check'
++          AND pg_get_constraintdef(oid) NOT ILIKE '%gemini%'
++    ) THEN
++        ALTER TABLE ai_settings
++            DROP CONSTRAINT ai_settings_provider_check;
++
++        ALTER TABLE ai_settings
++            ADD CONSTRAINT ai_settings_provider_check
++            CHECK (provider IN ('ollama', 'openai', 'anthropic', 'gemini'));
++    END IF;
++END
++$$;
+diff --git a/server/schema.sql b/server/schema.sql
+index 15d19ec6473e41a262ead71d99d90c3a730bcdfa..64830a8ca576479e1b0ba8e84d14b5416c9c7dd9 100644
+--- a/server/schema.sql
++++ b/server/schema.sql
+@@ -227,7 +227,7 @@ CREATE TABLE family_notes (
+ CREATE TABLE ai_settings (
+     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+     user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+-    provider VARCHAR(20) NOT NULL CHECK (provider IN ('ollama', 'openai', 'anthropic')),
++    provider VARCHAR(20) NOT NULL CHECK (provider IN ('ollama', 'openai', 'anthropic', 'gemini')),
+     base_url TEXT,
+     encrypted_api_key TEXT,
+     model VARCHAR(100) NOT NULL,
+diff --git a/server/src/db.ts b/server/src/db.ts
+index 95ab9f591ca24ba5b276d6ca22cb73ab46155581..4a3d36d9a9fdf5397af684107a2a6e70d070b080 100644
+--- a/server/src/db.ts
++++ b/server/src/db.ts
+@@ -252,7 +252,7 @@ export const runMigrations = async () => {
+         `CREATE TABLE IF NOT EXISTS ai_settings (
+             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+             user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+-            provider VARCHAR(20) NOT NULL CHECK (provider IN ('ollama', 'openai', 'anthropic')),
++            provider VARCHAR(20) NOT NULL CHECK (provider IN ('ollama', 'openai', 'anthropic', 'gemini')),
+             base_url TEXT,
+             encrypted_api_key TEXT,
+             model VARCHAR(100) NOT NULL,
+@@ -430,10 +430,33 @@ export const runMigrations = async () => {
+         "ALTER TABLE recurring_expenses ADD COLUMN IF NOT EXISTS is_expense BOOLEAN NOT NULL DEFAULT true",
+     ];
+ 
+-    for (const migration of migrations) {
++    
++for (const migration of migrations) {
+         await pool.query(migration);
+     }
+ 
++        // Gemini AI provider: widen the existing ai_settings provider CHECK
++        // constraint once for installations created before Gemini support.
++        await pool.query(`
++            DO $$
++            BEGIN
++                IF EXISTS (
++                    SELECT 1
++                    FROM pg_constraint
++                    WHERE conname = 'ai_settings_provider_check'
++                      AND pg_get_constraintdef(oid) NOT ILIKE '%gemini%'
++                ) THEN
++                    ALTER TABLE ai_settings
++                        DROP CONSTRAINT ai_settings_provider_check;
++
++                    ALTER TABLE ai_settings
++                        ADD CONSTRAINT ai_settings_provider_check
++                        CHECK (provider IN ('ollama', 'openai', 'anthropic', 'gemini'));
++                END IF;
++            END
++            $$;
++        `);
++
+     logger.info('db.migrations_complete', { count: migrations.length });
+ };
+ 
+diff --git a/server/src/routes/ai.ts b/server/src/routes/ai.ts
+index 9e3567119ec338d38ab0266156ccf5068fb0d963..199f31eac4dd36a5eace6fa3759226e6a732137e 100644
+--- a/server/src/routes/ai.ts
++++ b/server/src/routes/ai.ts
+@@ -23,7 +23,7 @@ import logger from '../lib/logger';
+ const router = Router();
+ router.use(authMiddleware);
+ 
+-const PROVIDERS: AiProvider[] = ['ollama', 'openai', 'anthropic'];
++const PROVIDERS: AiProvider[] = ['ollama', 'openai', 'anthropic', 'gemini'];
+ 
+ interface AiSettingsRow {
+     provider: AiProvider;
+@@ -59,6 +59,10 @@ const toAiSettings = (row: AiSettingsRow): AiSettings => ({
+ 
+ const handleAiError = (res: Response, error: unknown, context: string) => {
+     if (error instanceof AiError) {
++        logger.error(`ai.${context}_provider_error`, {
++            code: error.code,
++            message: error.message,
++        });
+         // The code is machine-readable (the client maps it to a localized message);
+         // `message` carries the provider detail for power users.
+         return res.status(502).json({ success: false, error: error.code, message: error.message });
+@@ -115,7 +119,7 @@ router.put('/settings', requireParent, async (req: AuthRequest, res) => {
+ 
+         // Anthropic uses the official endpoint — no base URL to store.
+         let cleanedBaseUrl: string | null = null;
+-        if (provider !== 'anthropic') {
++        if (provider !== 'anthropic' && provider !== 'gemini') {
+             const rawUrl = typeof base_url === 'string' ? base_url.trim().replace(/\/+$/, '') : '';
+             if (rawUrl) {
+                 try {
+diff --git a/server/src/services/ai/gemini.ts b/server/src/services/ai/gemini.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..a6a8121751f56f886064e779d318a48bbaebad9c
+--- /dev/null
++++ b/server/src/services/ai/gemini.ts
+@@ -0,0 +1,139 @@
++// Google Gemini provider — direct Gemini API integration.
++//
++// The API key stays server-side in OpenFamily's encrypted AI settings.
++// Structured JSON output is requested so Gemini fits the same validated
++// completion pipeline used by the other OpenFamily AI providers.
++
++import {
++    AiError,
++    aiFetch,
++    extractJson,
++    type AiSettings,
++    type AiCompletionRequest,
++    type TokenUsage,
++} from './index';
++
++const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
++
++export async function geminiComplete(
++    settings: AiSettings,
++    request: AiCompletionRequest
++): Promise<{ data: Record<string, unknown>; usage: TokenUsage | null }> {
++    if (!settings.api_key) {
++        throw new AiError('AI_UNAUTHORIZED', 'Clé API Google Gemini manquante');
++    }
++
++    const model = settings.model.trim();
++    if (!model) {
++        throw new AiError('AI_MODEL_NOT_FOUND', 'Modèle Gemini manquant');
++    }
++
++    const url =
++        `${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent`;
++
++    const response = await aiFetch(url, {
++        method: 'POST',
++        headers: {
++            'Content-Type': 'application/json',
++            'x-goog-api-key': settings.api_key,
++        },
++        body: JSON.stringify({
++            system_instruction: {
++                parts: [{ text: request.system }],
++            },
++            contents: [
++                {
++                    role: 'user',
++                    parts: [{ text: request.user }],
++                },
++            ],
++            generationConfig: {
++                responseMimeType: 'application/json',
++                responseJsonSchema: request.jsonSchema,
++            },
++        }),
++    });
++
++    if (!response.ok) {
++        const detail = await safeErrorMessage(response);
++
++        if (response.status === 401 || response.status === 403) {
++            throw new AiError(
++                'AI_UNAUTHORIZED',
++                detail || 'Clé API Google Gemini refusée'
++            );
++        }
++
++        if (
++            response.status === 404 ||
++            (/model/i.test(detail) &&
++                /not found|not supported|does not exist/i.test(detail))
++        ) {
++            throw new AiError(
++                'AI_MODEL_NOT_FOUND',
++                detail || `Modèle Gemini introuvable: ${model}`
++            );
++        }
++
++        throw new AiError(
++            'AI_PROVIDER_ERROR',
++            detail || `Google Gemini a répondu HTTP ${response.status}`
++        );
++    }
++
++    const body = (await response.json().catch(() => null)) as {
++        candidates?: Array<{
++            content?: {
++                parts?: Array<{
++                    text?: string;
++                }>;
++            };
++        }>;
++        usageMetadata?: {
++            promptTokenCount?: number;
++            candidatesTokenCount?: number;
++            totalTokenCount?: number;
++        };
++    } | null;
++
++    const parts = body?.candidates?.[0]?.content?.parts ?? [];
++    const content = parts
++        .map((part) => (typeof part.text === 'string' ? part.text : ''))
++        .join('')
++        .trim();
++
++    if (!content) {
++        throw new AiError(
++            'AI_INVALID_RESPONSE',
++            'Réponse Google Gemini vide'
++        );
++    }
++
++    const result = extractJson(content);
++
++    const usage = body?.usageMetadata
++        ? {
++              prompt_tokens: body.usageMetadata.promptTokenCount ?? 0,
++              completion_tokens: body.usageMetadata.candidatesTokenCount ?? 0,
++              total_tokens: body.usageMetadata.totalTokenCount ?? 0,
++          }
++        : null;
++
++    return { data: result, usage };
++}
++
++async function safeErrorMessage(response: Response): Promise<string> {
++    try {
++        const body = (await response.json()) as {
++            error?: {
++                message?: string;
++            };
++        };
++
++        return typeof body?.error?.message === 'string'
++            ? body.error.message
++            : '';
++    } catch {
++        return '';
++    }
++}
+diff --git a/server/src/services/ai/index.ts b/server/src/services/ai/index.ts
+index 2bf33e6ad772670612389795c08a6f6e8ac02379..50cfd5932f90aba2a1f0c2e3a791443dd042b181 100644
+--- a/server/src/services/ai/index.ts
++++ b/server/src/services/ai/index.ts
+@@ -8,8 +8,9 @@
+ import { ollamaComplete } from './ollama';
+ import { openaiComplete } from './openai';
+ import { anthropicComplete } from './anthropic';
++import { geminiComplete } from './gemini';
+ 
+-export type AiProvider = 'ollama' | 'openai' | 'anthropic';
++export type AiProvider = 'ollama' | 'openai' | 'anthropic' | 'gemini';
+ 
+ export interface AiSettings {
+     provider: AiProvider;
+@@ -48,6 +49,7 @@ export const DEFAULT_BASE_URLS: Record<AiProvider, string | null> = {
+     ollama: 'http://localhost:11434',
+     openai: 'https://api.openai.com',
+     anthropic: null,
++    gemini: null,
+ };
+ 
+ /**
+@@ -130,6 +132,8 @@ export async function aiCompleteWithUsage(
+             return openaiComplete(settings, request);
+         case 'anthropic':
+             return anthropicComplete(settings, request);
++        case 'gemini':
++            return geminiComplete(settings, request);
+         default:
+             throw new AiError('AI_PROVIDER_ERROR', `Fournisseur IA inconnu: ${settings.provider}`);
+     }

@@ -1,0 +1,15 @@
+client/src/i18n/locales/en/ai.json
+client/src/i18n/locales/fr/ai.json
+client/src/i18n/locales/pt/ai.json
+client/src/i18n/locales/zh/ai.json
+client/src/lib/aiStatus.ts
+client/src/pages/Budget.tsx
+client/src/pages/Calendar.tsx
+client/src/pages/Planning.tsx
+client/src/pages/Settings.tsx
+server/migrations/006_add_gemini_ai_provider.sql
+server/schema.sql
+server/src/db.ts
+server/src/routes/ai.ts
+server/src/services/ai/gemini.ts
+server/src/services/ai/index.ts
